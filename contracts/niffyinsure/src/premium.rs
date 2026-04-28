@@ -14,8 +14,8 @@ use crate::{
     premium_pure,
     storage,
     types::{
-        AgeBand, CoverageTier, MultiplierTable, PremiumQuoteLineItem, PremiumTableUpdated,
-        RegionTier, RiskInput,
+        AgeBand, CoverageTier, MultiplierKey, MultiplierTable, PremiumMultiplierUpdated,
+        PremiumQuoteLineItem, PremiumTableUpdated, RegionTier, RiskInput,
     },
     validate::Error,
 };
@@ -60,6 +60,81 @@ pub fn update_multiplier_table(env: &Env, new_table: &MultiplierTable) -> Result
     storage::set_multiplier_table(env, new_table);
     PremiumTableUpdated { version: new_table.version }.publish(env);
     Ok(())
+}
+
+/// Admin-only: update a single multiplier entry without redeploying the contract.
+///
+/// # Key format
+/// See [`MultiplierKey`] for the full key taxonomy and valid value ranges.
+///
+/// # Bounds
+/// - `Region`, `Age`, `Coverage` values: `MIN_MULTIPLIER..=MAX_MULTIPLIER` (5_000–20_000)
+/// - `SafetyDiscount` value: `0..=MAX_SAFETY_DISCOUNT` (0–5_000)
+///
+/// # Emits
+/// [`PremiumMultiplierUpdated`] with `key`, `old_value`, and `new_value`.
+/// Premium calculations use the updated value immediately after this call.
+pub fn admin_set_premium_multiplier(
+    env: &Env,
+    key: MultiplierKey,
+    value: i128,
+) -> Result<(), Error> {
+    // Validate bounds before touching storage.
+    let old_value = validate_and_get_old(env, &key, value)?;
+
+    let mut table = storage::get_multiplier_table(env);
+
+    match key.clone() {
+        MultiplierKey::Region(tier) => {
+            table.region.set(tier, value);
+        }
+        MultiplierKey::Age(band) => {
+            table.age.set(band, value);
+        }
+        MultiplierKey::Coverage(tier) => {
+            table.coverage.set(tier, value);
+        }
+        MultiplierKey::SafetyDiscount => {
+            table.safety_discount = value;
+        }
+    }
+
+    storage::set_multiplier_table(env, &table);
+
+    PremiumMultiplierUpdated { key, old_value, new_value: value }.publish(env);
+
+    Ok(())
+}
+
+/// Validate the new value for `key` and return the current (old) value.
+fn validate_and_get_old(env: &Env, key: &MultiplierKey, value: i128) -> Result<i128, Error> {
+    let table = storage::get_multiplier_table(env);
+    match key {
+        MultiplierKey::Region(tier) => {
+            if !(MIN_MULTIPLIER..=MAX_MULTIPLIER).contains(&value) {
+                return Err(Error::RegionMultiplierOutOfBounds);
+            }
+            Ok(table.region.get(tier.clone()).unwrap_or(0))
+        }
+        MultiplierKey::Age(band) => {
+            if !(MIN_MULTIPLIER..=MAX_MULTIPLIER).contains(&value) {
+                return Err(Error::AgeMultiplierOutOfBounds);
+            }
+            Ok(table.age.get(band.clone()).unwrap_or(0))
+        }
+        MultiplierKey::Coverage(tier) => {
+            if !(MIN_MULTIPLIER..=MAX_MULTIPLIER).contains(&value) {
+                return Err(Error::CoverageMultiplierOutOfBounds);
+            }
+            Ok(table.coverage.get(tier.clone()).unwrap_or(0))
+        }
+        MultiplierKey::SafetyDiscount => {
+            if value < 0 || value > MAX_SAFETY_DISCOUNT {
+                return Err(Error::SafetyDiscountOutOfBounds);
+            }
+            Ok(table.safety_discount)
+        }
+    }
 }
 
 /// Delegate to `premium_pure::compute_premium` — no Env required for the math.

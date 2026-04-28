@@ -188,6 +188,25 @@ impl NiffyInsure {
         premium::update_multiplier_table(&env, &new_table)
     }
 
+    /// Admin-only: update a single multiplier entry without redeploying the contract.
+    ///
+    /// Emits `PremiumMultiplierUpdated` with the key, old value, and new value.
+    /// Premium calculations use the updated value immediately after this call.
+    ///
+    /// # Bounds
+    /// - Region / Age / Coverage keys: `MIN_MULTIPLIER..=MAX_MULTIPLIER` (5_000–20_000)
+    /// - SafetyDiscount key: `0..=MAX_SAFETY_DISCOUNT` (0–5_000)
+    pub fn admin_set_premium_multiplier(
+        env: Env,
+        key: types::MultiplierKey,
+        value: i128,
+    ) -> Result<(), validate::Error> {
+        let admin = storage::get_admin(&env);
+        admin.require_auth();
+        storage::bump_instance(&env);
+        premium::admin_set_premium_multiplier(&env, key, value)
+    }
+
     pub fn get_multiplier_table(env: Env) -> types::MultiplierTable {
         storage::get_multiplier_table(&env)
     }

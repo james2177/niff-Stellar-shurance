@@ -374,10 +374,40 @@ pub struct MultiplierTable {
     pub version: u32,
 }
 
+/// Identifies a single row in the multiplier table for granular admin updates.
+///
+/// # Key format
+/// - `Region(tier)` — one of `RegionTier::{Low, Medium, High}`
+/// - `Age(band)` — one of `AgeBand::{Young, Adult, Senior}`
+/// - `Coverage(tier)` — one of `CoverageTier::{Basic, Standard, Premium}`
+/// - `SafetyDiscount` — the flat discount applied when `safety_score > 0`
+///
+/// # Valid value ranges
+/// - `Region`, `Age`, `Coverage` entries: `MIN_MULTIPLIER..=MAX_MULTIPLIER` (5_000–20_000, scale 10_000 = 1×)
+/// - `SafetyDiscount`: `0..=MAX_SAFETY_DISCOUNT` (0–5_000)
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MultiplierKey {
+    Region(RegionTier),
+    Age(AgeBand),
+    Coverage(CoverageTier),
+    SafetyDiscount,
+}
+
 #[contractevent(topics = ["niffyinsure", "premium_table_updated"])]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PremiumTableUpdated {
     pub version: u32,
+}
+
+/// Emitted by `admin_set_premium_multiplier` for each granular update.
+/// topics: ("niffyinsure", "premium_multiplier_updated")
+#[contractevent(topics = ["niffyinsure", "premium_multiplier_updated"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PremiumMultiplierUpdated {
+    pub key: MultiplierKey,
+    pub old_value: i128,
+    pub new_value: i128,
 }
 
 #[contractevent(topics = ["niffyinsure", "claim_paid"])]
