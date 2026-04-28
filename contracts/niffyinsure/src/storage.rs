@@ -4,6 +4,38 @@ use crate::ledger;
 use crate::types::{Claim, MultiplierTable, Policy, VoteOption};
 
 // ── TTL constants ─────────────────────────────────────────────────────────────
+///
+/// # TTL Management Strategy
+///
+/// Soroban persistent storage entries expire when their TTL reaches zero.
+/// This contract uses a systematic approach to prevent data loss:
+///
+/// ## Constants and Their Relationships
+///
+/// - `PERSISTENT_TTL_THRESHOLD` (100,000 ledgers ~ 5.8 days): When remaining TTL
+///   falls below this threshold, `extend_ttl` operations will extend the entry.
+///
+/// - `PERSISTENT_TTL_EXTEND_TO` (6,000,000 ledgers ~ 1 year): Target TTL after
+///   extension. Provides ~12x buffer over maximum policy duration (518,400 ledgers ~ 30 days).
+///
+/// - `DEFAULT_TTL_ALERT_THRESHOLD` (600,000 ledgers ~ 1 month): Default alert
+///   threshold for TTL expiry notifications (10% of PERSISTENT_TTL_EXTEND_TO).
+///
+/// ## Policy Duration Relationship
+///
+/// - Maximum policy duration: 518,400 ledgers (~30 days)
+/// - TTL extension target: 6,000,000 ledgers (~1 year) 
+/// - Safety factor: ~11.6x policy duration
+///
+/// This ensures policies can complete multiple renewal cycles without TTL expiry,
+/// even with administrative delays or keeper maintenance windows.
+///
+/// ## Claim Voting TTL
+///
+/// Claim voter snapshots use separate constants aligned with voting windows:
+/// - `CLAIM_VOTER_SNAPSHOT_TTL_THRESHOLD`: MAX_VOTING_DURATION_LEDGERS + 1 week
+/// - `CLAIM_VOTER_SNAPSHOT_EXTEND_TO`: MAX_VOTING_DURATION_LEDGERS + 3 weeks
+///
 /// Minimum TTL threshold before we extend (in ledgers).
 pub const PERSISTENT_TTL_THRESHOLD: u32 = 100_000;
 /// Target TTL after extension (in ledgers, ~1 year).
@@ -100,6 +132,8 @@ pub enum DataKey {
     /// Per-holder replay-protection nonce. Incremented on each successful mutating call
     /// when the caller supplies `expected_nonce`. Supplementary to Stellar sequence numbers.
     HolderNonce(Address),
+    /// Configurable threshold for TTL expiry alerts (instance storage).
+    TtlAlertThreshold,
     // ── Oracle / parametric trigger (experimental) ────────────────────────
     /// Monotonically increasing trigger ID counter.
     TriggerCounter,
@@ -656,9 +690,13 @@ pub fn get_claim_voters(env: &Env, claim_id: u64) -> Vec<Address> {
 // ── Rate-limit anchor ─────────────────────────────────────────────────────────
 
 pub fn set_last_claim_ledger(env: &Env, holder: &Address, ledger: u32) {
+    let key = DataKey::LastClaimLedger(holder.clone());
     env.storage()
         .persistent()
-        .set(&DataKey::LastClaimLedger(holder.clone()), &ledger);
+        .set(&key, &ledger);
+    env.storage()
+        .persistent()
+        .extend_ttl(&key, PERSISTENT_TTL_THRESHOLD, PERSISTENT_TTL_EXTEND_TO);
 }
 
 pub fn get_last_claim_ledger(env: &Env, holder: &Address) -> Option<u32> {
@@ -1003,6 +1041,119 @@ pub fn set_oracle_quorum(env: &Env, source: &Address, quorum: u32) {
     env.storage()
         .instance()
         .set(&DataKey::OracleQuorum(source.clone()), &quorum);
+}
+
+// ── Keeper TTL Management ─────────────────────────────────────────────────────
+
+/// Configurable threshold for TTL expiry alerts (instance storage).
+/// Default: 10% of PERSISTENT_TTL_EXTEND_TO (600,000 ledgers ~ 1 month).
+pub const DEFAULT_TTL_ALERT_THRESHOLD: u32 = 600_000;
+
+/// Get the configured TTL alert threshold. Returns default if not set.
+pub fn get_ttl_alert_threshold(env: &Env) -> u32 {
+    env.storage()
+        .instance()
+        .get(&DataKey::TtlAlertThreshold)
+        .unwrap_or(DEFAULT_TTL_ALERT_THRESHOLD)
+}
+
+/// Set the TTL alert threshold (admin only).
+pub fn set_ttl_alert_threshold(env: &Env, threshold: u32) {
+    env.storage()
+        .instance()
+        .set(&DataKey::TtlAlertThreshold, &threshold);
+}
+
+/// Check if a policy's TTL is within the alert threshold.
+/// Returns true if TTL remaining <= threshold.
+pub fn is_policy_ttl_near_expiry(env: &Env, holder: &Address, policy_id: u32) -> bool {
+    let key = DataKey::Policy(holder.clone(), policy_id);
+    if let Some(ttl_info) = env.storage().persistent().ttl(&key) {
+        let threshold = get_ttl_alert_threshold(env);
+        ttl_info.remaining <= threshold
+    } else {
+        // Policy doesn't exist or has no TTL info
+        false
+    }
+}
+
+/// Extend TTL for a specific policy and its related entries.
+/// Keeper function to prevent data loss for long-lived policies.
+pub fn bump_policy_ttl(env: &Env, holder: &Address, policy_id: u32) -> bool {
+    let policy_key = DataKey::Policy(holder.clone(), policy_id);
+    
+    // Check if policy exists
+    if !env.storage().persistent().has(&policy_key) {
+        return false;
+    }
+    
+    // Extend policy TTL
+    env.storage()
+        .persistent()
+        .extend_ttl(&policy_key, PERSISTENT_TTL_THRESHOLD, PERSISTENT_TTL_EXTEND_TO);
+    
+    // Extend related policy counter TTL
+    let counter_key = DataKey::PolicyCounter(holder.clone());
+    env.storage()
+        .persistent()
+        .extend_ttl(&counter_key, PERSISTENT_TTL_THRESHOLD, PERSISTENT_TTL_EXTEND_TO);
+    
+    true
+}
+
+/// Extend TTL for all policies belonging to a holder.
+/// Returns number of policies extended.
+pub fn bump_holder_all_policies_ttl(env: &Env, holder: &Address) -> u32 {
+    let counter = get_policy_counter(env, holder);
+    let mut extended = 0u32;
+    
+    for policy_id in 1..=counter {
+        if bump_policy_ttl(env, holder, policy_id) {
+            extended += 1;
+        }
+    }
+    
+    extended
+}
+
+/// Extend TTL for all claim-related entries for a specific claim.
+pub fn bump_claim_ttl(env: &Env, claim_id: u64) -> bool {
+    let claim_key = DataKey::Claim(claim_id);
+    
+    // Check if claim exists
+    if !env.storage().persistent().has(&claim_key) {
+        return false;
+    }
+    
+    // Extend claim TTL
+    env.storage()
+        .persistent()
+        .extend_ttl(&claim_key, PERSISTENT_TTL_THRESHOLD, PERSISTENT_TTL_EXTEND_TO);
+    
+    // Extend claim voters snapshot TTL
+    extend_claim_voters_snapshot_ttl(env, claim_id);
+    
+    // Extend claim quorum BPS TTL
+    let quorum_key = DataKey::ClaimQuorumBps(claim_id);
+    if env.storage().persistent().has(&quorum_key) {
+        env.storage()
+            .persistent()
+            .extend_ttl(&quorum_key, PERSISTENT_TTL_THRESHOLD, PERSISTENT_TTL_EXTEND_TO);
+    }
+    
+    true
+}
+
+/// Get TTL information for a policy (for monitoring/alerts).
+pub fn get_policy_ttl_info(env: &Env, holder: &Address, policy_id: u32) -> Option<u32> {
+    let key = DataKey::Policy(holder.clone(), policy_id);
+    env.storage().persistent().ttl(&key).map(|info| info.remaining)
+}
+
+/// Get TTL information for a claim (for monitoring/alerts).
+pub fn get_claim_ttl_info(env: &Env, claim_id: u64) -> Option<u32> {
+    let key = DataKey::Claim(claim_id);
+    env.storage().persistent().ttl(&key).map(|info| info.remaining)
 }
 
 // ── Non-experimental stubs (panic guards) ────────────────────────────────────

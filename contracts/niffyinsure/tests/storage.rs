@@ -630,3 +630,253 @@ fn generate_premium_does_not_mutate_counters() {
     assert_eq!(before_cc, client.get_claim_counter());
     assert_eq!(before_pc, client.get_policy_counter(&holder));
 }
+
+// ── TTL Management Tests ───────────────────────────────────────────────────────
+
+#[test]
+fn ttl_constants_documented_values() {
+    // Verify TTL constants match documented values
+    assert_eq!(niffyinsure::storage::PERSISTENT_TTL_THRESHOLD, 100_000);
+    assert_eq!(niffyinsure::storage::PERSISTENT_TTL_EXTEND_TO, 6_000_000);
+    assert_eq!(niffyinsure::storage::DEFAULT_TTL_ALERT_THRESHOLD, 600_000);
+}
+
+#[test]
+fn policy_creation_sets_ttl() {
+    let (env, contract_id, _, token) = setup();
+    let holder = Address::generate(&env);
+    let client = NiffyInsureClient::new(&env, &contract_id);
+    
+    // Create a policy through the contract
+    let asset = token;
+    let policy = make_policy(&holder, 1, &asset);
+    
+    env.as_contract(&contract_id, || {
+        niffyinsure::storage::set_policy(&env, &holder, 1, &policy);
+        
+        // Verify TTL is set
+        let ttl_info = niffyinsure::storage::get_policy_ttl_info(&env, &holder, 1);
+        assert!(ttl_info.is_some(), "Policy TTL should be set");
+        assert!(ttl_info.unwrap() > 0, "TTL should be positive");
+    });
+}
+
+#[test]
+fn claim_creation_sets_ttl() {
+    let (env, contract_id, _, token) = setup();
+    let holder = Address::generate(&env);
+    
+    env.as_contract(&contract_id, || {
+        use niffyinsure::types::{Claim, ClaimStatus};
+        let claim = Claim {
+            claim_id: 1,
+            policy_id: 1,
+            claimant: holder.clone(),
+            amount: 50_000_000,
+            deductible: 0,
+            asset: token.clone(),
+            details: String::from_str(&env, "test claim"),
+            evidence: common::empty_evidence(&env),
+            status: ClaimStatus::Processing,
+            voting_deadline_ledger: 1000,
+            approve_votes: 0,
+            reject_votes: 0,
+            filed_at: 1,
+            appeal_open_deadline_ledger: 0,
+            appeals_count: 0,
+            appeal_deadline_ledger: 0,
+            appeal_approve_votes: 0,
+            appeal_reject_votes: 0,
+            status_history: soroban_sdk::Vec::new(&env),
+        };
+        
+        niffyinsure::storage::set_claim(&env, &claim);
+        
+        // Verify TTL is set
+        let ttl_info = niffyinsure::storage::get_claim_ttl_info(&env, 1);
+        assert!(ttl_info.is_some(), "Claim TTL should be set");
+        assert!(ttl_info.unwrap() > 0, "TTL should be positive");
+    });
+}
+
+#[test]
+fn keeper_bump_policy_ttl() {
+    let (env, contract_id, _, token) = setup();
+    let holder = Address::generate(&env);
+    let client = NiffyInsureClient::new(&env, &contract_id);
+    
+    // Create a policy
+    let policy = make_policy(&holder, 1, &token);
+    env.as_contract(&contract_id, || {
+        niffyinsure::storage::set_policy(&env, &holder, 1, &policy);
+        niffyinsure::storage::next_policy_id(&env, &holder);
+    });
+    
+    // Test keeper TTL bump
+    let result = client.bump_policy_ttl(&holder, &1u32);
+    assert!(result, "Policy TTL should be bumped successfully");
+    
+    // Test bumping non-existent policy
+    let result = client.bump_policy_ttl(&holder, &999u32);
+    assert!(!result, "Non-existent policy should return false");
+}
+
+#[test]
+fn keeper_bump_holder_all_policies_ttl() {
+    let (env, contract_id, _, token) = setup();
+    let holder = Address::generate(&env);
+    let client = NiffyInsureClient::new(&env, &contract_id);
+    
+    // Create multiple policies
+    for policy_id in 1..=3 {
+        let policy = make_policy(&holder, policy_id, &token);
+        env.as_contract(&contract_id, || {
+            niffyinsure::storage::set_policy(&env, &holder, policy_id, &policy);
+        });
+    }
+    
+    // Set policy counter to 3
+    env.as_contract(&contract_id, || {
+        niffyinsure::storage::next_policy_id(&env, &holder);
+        niffyinsure::storage::next_policy_id(&env, &holder);
+        niffyinsure::storage::next_policy_id(&env, &holder);
+    });
+    
+    // Test bumping all holder policies
+    let count = client.bump_holder_all_policies_ttl(&holder);
+    assert_eq!(count, 3, "Should bump TTL for all 3 policies");
+}
+
+#[test]
+fn keeper_bump_claim_ttl() {
+    let (env, contract_id, _, token) = setup();
+    let holder = Address::generate(&env);
+    let client = NiffyInsureClient::new(&env, &contract_id);
+    
+    // Create a claim
+    env.as_contract(&contract_id, || {
+        use niffyinsure::types::{Claim, ClaimStatus};
+        let claim = Claim {
+            claim_id: 1,
+            policy_id: 1,
+            claimant: holder.clone(),
+            amount: 50_000_000,
+            deductible: 0,
+            asset: token.clone(),
+            details: String::from_str(&env, "test claim"),
+            evidence: common::empty_evidence(&env),
+            status: ClaimStatus::Processing,
+            voting_deadline_ledger: 1000,
+            approve_votes: 0,
+            reject_votes: 0,
+            filed_at: 1,
+            appeal_open_deadline_ledger: 0,
+            appeals_count: 0,
+            appeal_deadline_ledger: 0,
+            appeal_approve_votes: 0,
+            appeal_reject_votes: 0,
+            status_history: soroban_sdk::Vec::new(&env),
+        };
+        
+        niffyinsure::storage::set_claim(&env, &claim);
+        niffyinsure::storage::set_claim_quorum_bps(&env, 1, 5000);
+        niffyinsure::storage::snapshot_claim_voters(&env, 1);
+    });
+    
+    // Test keeper TTL bump
+    let result = client.bump_claim_ttl(&1u64);
+    assert!(result, "Claim TTL should be bumped successfully");
+    
+    // Test bumping non-existent claim
+    let result = client.bump_claim_ttl(&999u64);
+    assert!(!result, "Non-existent claim should return false");
+}
+
+#[test]
+fn ttl_alert_threshold_management() {
+    let (env, contract_id, admin, _) = setup();
+    let client = NiffyInsureClient::new(&env, &contract_id);
+    
+    // Test default threshold
+    let threshold = client.get_ttl_alert_threshold();
+    assert_eq!(threshold, 600_000, "Default threshold should be 600,000");
+    
+    // Test setting custom threshold
+    client.set_ttl_alert_threshold(&300_000u32).expect("Admin should set threshold");
+    let threshold = client.get_ttl_alert_threshold();
+    assert_eq!(threshold, 300_000, "Threshold should be updated");
+}
+
+#[test]
+fn policy_ttl_near_expiry_check() {
+    let (env, contract_id, _, token) = setup();
+    let holder = Address::generate(&env);
+    let client = NiffyInsureClient::new(&env, &contract_id);
+    
+    // Create a policy
+    let policy = make_policy(&holder, 1, &token);
+    env.as_contract(&contract_id, || {
+        niffyinsure::storage::set_policy(&env, &holder, 1, &policy);
+    });
+    
+    // Test TTL near expiry check (should be false for fresh policy)
+    let near_expiry = client.is_policy_ttl_near_expiry(&holder, &1u32);
+    assert!(!near_expiry, "Fresh policy should not be near expiry");
+    
+    // Test non-existent policy
+    let near_expiry = client.is_policy_ttl_near_expiry(&holder, &999u32);
+    assert!(!near_expiry, "Non-existent policy should return false");
+}
+
+#[test]
+fn ttl_info_queries() {
+    let (env, contract_id, _, token) = setup();
+    let holder = Address::generate(&env);
+    let client = NiffyInsureClient::new(&env, &contract_id);
+    
+    // Create policy and claim
+    let policy = make_policy(&holder, 1, &token);
+    env.as_contract(&contract_id, || {
+        niffyinsure::storage::set_policy(&env, &holder, 1, &policy);
+        
+        use niffyinsure::types::{Claim, ClaimStatus};
+        let claim = Claim {
+            claim_id: 1,
+            policy_id: 1,
+            claimant: holder.clone(),
+            amount: 50_000_000,
+            deductible: 0,
+            asset: token.clone(),
+            details: String::from_str(&env, "test claim"),
+            evidence: common::empty_evidence(&env),
+            status: ClaimStatus::Processing,
+            voting_deadline_ledger: 1000,
+            approve_votes: 0,
+            reject_votes: 0,
+            filed_at: 1,
+            appeal_open_deadline_ledger: 0,
+            appeals_count: 0,
+            appeal_deadline_ledger: 0,
+            appeal_approve_votes: 0,
+            appeal_reject_votes: 0,
+            status_history: soroban_sdk::Vec::new(&env),
+        };
+        niffyinsure::storage::set_claim(&env, &claim);
+    });
+    
+    // Test TTL info queries
+    let policy_ttl = client.get_policy_ttl_info(&holder, &1u32);
+    assert!(policy_ttl.is_some(), "Policy TTL info should be available");
+    assert!(policy_ttl.unwrap() > 0, "Policy TTL should be positive");
+    
+    let claim_ttl = client.get_claim_ttl_info(&1u64);
+    assert!(claim_ttl.is_some(), "Claim TTL info should be available");
+    assert!(claim_ttl.unwrap() > 0, "Claim TTL should be positive");
+    
+    // Test non-existent entries
+    let policy_ttl = client.get_policy_ttl_info(&holder, &999u32);
+    assert!(policy_ttl.is_none(), "Non-existent policy TTL should be None");
+    
+    let claim_ttl = client.get_claim_ttl_info(&999u64);
+    assert!(claim_ttl.is_none(), "Non-existent claim TTL should be None");
+}

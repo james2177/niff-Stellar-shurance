@@ -891,6 +891,53 @@ pub fn set_token(env: Env, new_token: Address) {
     }
 }
 
+/// Keeper TTL Management entrypoints
+#[contractimpl]
+impl NiffyInsure {
+    /// Keeper: extend TTL for a specific policy. Returns true if extended, false if policy not found.
+    /// Prevents data loss for long-lived policies without admin intervention.
+    pub fn bump_policy_ttl(env: Env, holder: Address, policy_id: u32) -> bool {
+        storage::bump_policy_ttl(&env, &holder, policy_id)
+    }
+
+    /// Keeper: extend TTL for all policies belonging to a holder. Returns count of policies extended.
+    pub fn bump_holder_all_policies_ttl(env: Env, holder: Address) -> u32 {
+        storage::bump_holder_all_policies_ttl(&env, &holder)
+    }
+
+    /// Keeper: extend TTL for all claim-related entries for a specific claim. Returns true if extended.
+    pub fn bump_claim_ttl(env: Env, claim_id: u64) -> bool {
+        storage::bump_claim_ttl(&env, claim_id)
+    }
+
+    /// Get TTL information for a policy (for monitoring/alerts). Returns remaining ledgers or None.
+    pub fn get_policy_ttl_info(env: Env, holder: Address, policy_id: u32) -> Option<u32> {
+        storage::get_policy_ttl_info(&env, &holder, policy_id)
+    }
+
+    /// Get TTL information for a claim (for monitoring/alerts). Returns remaining ledgers or None.
+    pub fn get_claim_ttl_info(env: Env, claim_id: u64) -> Option<u32> {
+        storage::get_claim_ttl_info(&env, claim_id)
+    }
+
+    /// Check if a policy's TTL is within the alert threshold. Returns true if near expiry.
+    pub fn is_policy_ttl_near_expiry(env: Env, holder: Address, policy_id: u32) -> bool {
+        storage::is_policy_ttl_near_expiry(&env, &holder, policy_id)
+    }
+
+    /// Admin: set the TTL alert threshold for expiry notifications.
+    pub fn set_ttl_alert_threshold(env: Env, threshold: u32) -> Result<(), AdminError> {
+        let _admin = admin::require_admin(&env);
+        storage::set_ttl_alert_threshold(&env, threshold);
+        Ok(())
+    }
+
+    /// Get the current TTL alert threshold.
+    pub fn get_ttl_alert_threshold(env: Env) -> u32 {
+        storage::get_ttl_alert_threshold(&env)
+    }
+}
+
 /// Governance token: reserved entrypoints only when built with `--features governance-token`.
 /// No mint/transfer/balance logic — see `governance_token` module TODO.
 #[cfg(feature = "governance-token")]
@@ -951,10 +998,11 @@ impl NiffyInsure {
             terminated_by_admin: false,
             strike_count: 0,
         };
-        env.storage().persistent().set(
-            &storage::DataKey::Policy(holder.clone(), policy_id),
-            &policy,
-        );
+        let key = storage::DataKey::Policy(holder.clone(), policy_id);
+        env.storage().persistent().set(&key, &policy);
+        env.storage()
+            .persistent()
+            .extend_ttl(&key, storage::PERSISTENT_TTL_THRESHOLD, storage::PERSISTENT_TTL_EXTEND_TO);
         storage::add_voter(&env, &holder);
     }
 
