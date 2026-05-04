@@ -3,7 +3,7 @@
  * Pulled from contracts/deployment-registry.json so docs and the app
  * never drift from the backend deployment registry.
  */
-import registry from '../../../contracts/deployment-registry.json'
+import registry from './deployment-registry.json'
 
 export type Network = 'testnet' | 'mainnet' | 'futurenet'
 

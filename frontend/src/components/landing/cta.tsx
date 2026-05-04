@@ -1,5 +1,3 @@
-'use client'
-
 import { ArrowRight, Rocket, Star } from 'lucide-react'
 import Link from 'next/link'
 import { Suspense } from 'react'
