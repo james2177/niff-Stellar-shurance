@@ -36,7 +36,7 @@ describe('ipfs-upload', () => {
   })
 
   it('computes SHA-256 hash using Web Crypto API', async () => {
-    const file = new File([new TextEncoder().encode('hello')], 'hello.txt', { type: 'text/plain' })
+    const file = new File([new TextEncoder().encode('hello').buffer as ArrayBuffer], 'hello.txt', { type: 'text/plain' })
     const hash = await computeFileSha256Hex(file)
     expect(hash).toBe('2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824')
   })
@@ -51,7 +51,7 @@ describe('ipfs-upload', () => {
       xhr.onload?.()
     })
 
-    const file = new File([new Uint8Array([1, 2, 3])], 'sample.png', { type: 'image/png' })
+    const file = new File([new Uint8Array([1, 2, 3]).buffer as ArrayBuffer], 'sample.png', { type: 'image/png' })
     await expect(
       uploadFileWithProgress(file, undefined, undefined, 1, 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
     ).rejects.toThrow('Uploaded content hash mismatch')
@@ -61,7 +61,7 @@ describe('ipfs-upload', () => {
     MockXMLHttpRequest.queue.push((xhr) => xhr.onerror?.())
     MockXMLHttpRequest.queue.push((xhr) => xhr.onerror?.())
 
-    const file = new File([new Uint8Array([1, 2, 3])], 'sample.png', { type: 'image/png' })
+    const file = new File([new Uint8Array([1, 2, 3]).buffer as ArrayBuffer], 'sample.png', { type: 'image/png' })
     await expect(uploadFileWithProgress(file, undefined, undefined, 2)).rejects.toThrow(
       'Network error during upload',
     )

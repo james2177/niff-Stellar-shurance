@@ -15,7 +15,7 @@ import { getContracts } from '@/lib/network-manifest'
 import { validateRpcUrl, PUBLIC_RPC, STATUS_PAGES, type AppSettings } from '@/lib/settings-store'
 import type { Network } from '@/lib/network-manifest'
 
-const NETWORKS: Network[] = ['testnet', 'public']
+const NETWORKS: Network[] = ['testnet', 'mainnet']
 const CURRENCIES: AppSettings['displayCurrency'][] = ['XLM', 'USD', 'EUR']
 
 export function SettingsPanel() {
@@ -36,7 +36,7 @@ export function SettingsPanel() {
 
   function handleNetworkChange(network: Network) {
     update('network', network)
-    setAppNetwork(network === 'public' ? 'mainnet' : 'testnet')
+    setAppNetwork(network === 'mainnet' ? 'mainnet' : 'testnet')
     startTransition(() => {
       getContracts(network)
     })
@@ -181,7 +181,7 @@ export function SettingsPanel() {
                 disabled={isPending}
                 aria-pressed={settings.network === n}
               >
-                {n === 'public' ? 'Mainnet' : 'Testnet'}
+                {n === 'mainnet' ? 'Mainnet' : 'Testnet'}
               </Button>
             ))}
           </div>

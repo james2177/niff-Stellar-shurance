@@ -52,9 +52,9 @@ const envSchema = z.object({
   /**
    * Active Stellar network.
    * - "testnet" → testnet RPC / Horizon / explorer
-   * - "public"  → mainnet RPC / Horizon / explorer
+   * - "mainnet"  → mainnet RPC / Horizon / explorer
    */
-  NEXT_PUBLIC_NETWORK: z.enum(['testnet', 'public']).default('testnet'),
+  NEXT_PUBLIC_NETWORK: z.enum(['testnet', 'mainnet']).default('testnet'),
 
   /** Captcha site key (public, safe to expose) */
   NEXT_PUBLIC_CAPTCHA_SITE_KEY: z.string().default(''),
@@ -66,13 +66,13 @@ const envSchema = z.object({
   NEXT_PUBLIC_RAMP_ENABLED: z
     .string()
     .transform((v) => v === 'true')
-    .default('false'),
+    .default(false),
 
   /** Whether to emit anonymized click analytics for the ramp button */
   NEXT_PUBLIC_RAMP_ANALYTICS: z
     .string()
     .transform((v) => v === 'true')
-    .default('false'),
+    .default(false),
 })
 
 type Env = z.infer<typeof envSchema>
@@ -101,11 +101,11 @@ function parseEnv(): Env {
   // Dev-time consistency warning: mainnet contract ID looks like testnet config
   if (
     process.env.NODE_ENV === 'development' &&
-    result.data.NEXT_PUBLIC_NETWORK === 'public' &&
+    result.data.NEXT_PUBLIC_NETWORK === 'mainnet' &&
     result.data.NEXT_PUBLIC_SOROBAN_RPC_URL.includes('testnet')
   ) {
     console.warn(
-      '[env] Warning: NEXT_PUBLIC_NETWORK=public but NEXT_PUBLIC_SOROBAN_RPC_URL points at testnet.',
+      '[env] Warning: NEXT_PUBLIC_NETWORK=mainnet but NEXT_PUBLIC_SOROBAN_RPC_URL points at testnet.',
     )
   }
 
@@ -156,7 +156,7 @@ export function getConfig() {
 
     /** Stellar block explorer base URL for the active network */
     explorerBase:
-      env.NEXT_PUBLIC_NETWORK === 'public'
+      env.NEXT_PUBLIC_NETWORK === 'mainnet'
         ? 'https://stellar.expert/explorer/public/tx'
         : 'https://stellar.expert/explorer/testnet/tx',
   } as const

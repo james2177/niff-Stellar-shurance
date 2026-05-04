@@ -17,16 +17,21 @@ const mockPolicy: PolicyDto = {
   coverage_summary: {
     coverage_amount: '10000000000',
     premium_amount: '1000000000',
+    currency: 'XLM',
+    decimals: 7,
   },
   expiry_countdown: {
+    start_ledger: 1000000,
+    end_ledger: 1100000,
     ledgers_remaining: 100000,
     avg_ledger_close_seconds: 5,
   },
   beneficiary: null,
   claims: [],
+  _link: '/policies/1',
 }
 
-const mockWalletState = { connected: false, address: null as string | null };
+const mockWalletState = { connectionStatus: 'disconnected' as 'disconnected' | 'connected', address: null as string | null };
 
 jest.mock('@/features/wallet', () => ({
   useWallet: () => mockWalletState,
@@ -47,7 +52,7 @@ describe('PolicyDetailClient', () => {
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     })
-    mockWalletState.connected = false;
+    mockWalletState.connectionStatus = 'disconnected';
     mockWalletState.address = null;
   })
 
@@ -122,7 +127,7 @@ describe('PolicyDetailClient', () => {
   })
 
   it('shows beneficiary warning when different from connected wallet', () => {
-    mockWalletState.connected = true;
+    mockWalletState.connectionStatus = 'connected';
     mockWalletState.address = 'GDIFFERENT';
 
     const policyWithBeneficiary: PolicyDto = {
@@ -143,6 +148,8 @@ describe('PolicyDetailClient', () => {
     const expiredPolicy: PolicyDto = {
       ...mockPolicy,
       expiry_countdown: {
+        start_ledger: 1000000,
+        end_ledger: 1000000,
         ledgers_remaining: 0,
         avg_ledger_close_seconds: 5,
       },

@@ -226,26 +226,32 @@ export function PolicyInitiation({ quoteId: propQuoteId }: PolicyInitiationProps
                   <div>
                     <Label>Premium</Label>
                     <div className="text-2xl font-bold text-primary">
-                      {fmt(quote.premium)} XLM
+                      {fmt(quote.premiumXlm)} XLM
                     </div>
                   </div>
                   <div>
                     <Label>Coverage Amount</Label>
                     <div className="text-2xl font-bold">
-                      {fmt(quote.coverageAmount)} XLM
+                      {fmt(quote.premiumStroops)} stroops
                     </div>
                   </div>
                 </div>
                 
                 <div className="space-y-2">
-                  <Label>Terms & Conditions</Label>
+                  <Label>Quote Details</Label>
                   <ul className="text-sm text-muted-foreground space-y-1">
-                    {quote.terms.map((term: string, index: number) => (
-                      <li key={index} className="flex items-start gap-2">
-                        <CheckCircle className="h-3 w-3 text-green-500 mt-0.5 flex-shrink-0" />
-                        {term}
-                      </li>
-                    ))}
+                    <li className="flex items-start gap-2">
+                      <CheckCircle className="h-3 w-3 text-green-500 mt-0.5 flex-shrink-0" />
+                      Policy type: {quote.inputs.policy_type}
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle className="h-3 w-3 text-green-500 mt-0.5 flex-shrink-0" />
+                      Region: {quote.inputs.region}
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle className="h-3 w-3 text-green-500 mt-0.5 flex-shrink-0" />
+                      Source: {quote.source}
+                    </li>
                   </ul>
                 </div>
 
@@ -367,7 +373,7 @@ export function PolicyInitiation({ quoteId: propQuoteId }: PolicyInitiationProps
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span>Premium:</span>
-                      <span className="font-semibold">{quote ? fmt(quote.premium) : '0'} XLM</span>
+                      <span className="font-semibold">{quote ? fmt(quote.premiumXlm) : '0'} XLM</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Network Fee:</span>
@@ -375,7 +381,7 @@ export function PolicyInitiation({ quoteId: propQuoteId }: PolicyInitiationProps
                     </div>
                     <div className="flex justify-between border-t pt-2">
                       <span>Total:</span>
-                      <span className="font-semibold">{quote ? fmt(quote.premium + 0.01) : '0.01'} XLM</span>
+                      <span className="font-semibold">{quote ? fmt(Number(quote.premiumXlm) + 0.01) : '0.01'} XLM</span>
                     </div>
                   </div>
                 </div>

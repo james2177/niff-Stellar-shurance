@@ -19,11 +19,11 @@ describe('createQueryClient', () => {
     const retry = client.getDefaultOptions().queries?.retry;
     if (typeof retry !== 'function') throw new Error('retry should be a function');
 
-    const err400 = { status: 400 };
-    const err401 = { status: 401 };
-    const err404 = { status: 404 };
-    const err429 = { status: 429 };
-    const err500 = { status: 500 };
+    const err400 = { status: 400 } as unknown as Error;
+    const err401 = { status: 401 } as unknown as Error;
+    const err404 = { status: 404 } as unknown as Error;
+    const err429 = { status: 429 } as unknown as Error;
+    const err500 = { status: 500 } as unknown as Error;
     const networkErr = new Error('Failed to fetch');
 
     expect(retry(0, err400)).toBe(false);

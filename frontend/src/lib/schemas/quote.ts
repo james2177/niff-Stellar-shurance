@@ -12,12 +12,12 @@ export const QuoteFormSchema = z.object({
     message: 'Please select a coverage tier',
   }),
   age: z
-    .number({ invalid_type_error: 'Age is required' })
+    .number({ error: 'Age is required' })
     .int('Age must be a whole number')
     .min(1, 'Age must be at least 1')
     .max(120, 'Age must be at most 120'),
   risk_score: z
-    .number({ invalid_type_error: 'Risk score is required' })
+    .number({ error: 'Risk score is required' })
     .int('Risk score must be a whole number')
     .min(1, 'Risk score must be between 1 and 10')
     .max(10, 'Risk score must be between 1 and 10'),

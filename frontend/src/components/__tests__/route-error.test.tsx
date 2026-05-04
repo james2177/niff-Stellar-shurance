@@ -32,10 +32,10 @@ describe('RouteError', () => {
   describe('production UI', () => {
     const origEnv = process.env.NODE_ENV
     beforeAll(() => {
-      process.env.NODE_ENV = 'production'
+      Object.defineProperty(process.env, 'NODE_ENV', { value: 'production', writable: true, configurable: true })
     })
     afterAll(() => {
-      process.env.NODE_ENV = origEnv
+      Object.defineProperty(process.env, 'NODE_ENV', { value: origEnv, writable: true, configurable: true })
     })
 
     it('renders contextual copy without stack traces in the main UI', () => {

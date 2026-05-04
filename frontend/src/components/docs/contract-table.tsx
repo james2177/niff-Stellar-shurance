@@ -13,7 +13,7 @@ export function ContractTable() {
       <div className="flex items-center gap-3 mb-4">
         <span className="text-sm font-medium text-gray-700">Network:</span>
         <div className="flex rounded-md border overflow-hidden text-sm">
-          {(['testnet', 'public'] as Network[]).map((n) => (
+          {(['testnet', 'mainnet'] as Network[]).map((n) => (
             <button
               key={n}
               onClick={() => setNetwork(n)}
@@ -23,7 +23,7 @@ export function ContractTable() {
                   : 'bg-white text-gray-600 hover:bg-gray-50'
               }`}
             >
-              {n === 'public' ? 'Mainnet' : 'Testnet'}
+              {n === 'mainnet' ? 'Mainnet' : 'Testnet'}
             </button>
           ))}
         </div>

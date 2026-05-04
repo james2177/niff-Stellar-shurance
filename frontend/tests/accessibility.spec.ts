@@ -6,7 +6,7 @@
  * Install:  npm install -D @axe-core/playwright @playwright/test
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
 const BASE_URL = process.env.BASE_URL ?? 'http://localhost:3000';
@@ -14,7 +14,7 @@ const BASE_URL = process.env.BASE_URL ?? 'http://localhost:3000';
 // ---------------------------------------------------------------------------
 // Helper: run axe with WCAG 2.1 AA tags and assert no critical/serious issues
 // ---------------------------------------------------------------------------
-async function checkA11y(page: Parameters<typeof AxeBuilder>[0]['page'], path: string) {
+async function checkA11y(page: Page, path: string) {
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
     .analyze();

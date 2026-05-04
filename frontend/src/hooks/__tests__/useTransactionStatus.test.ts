@@ -271,7 +271,7 @@ describe('useTransactionStatus', () => {
 
     const { result, rerender } = renderHook(
       ({ hash }) => useTransactionStatus(hash),
-      { initialProps: { hash: 'tx-initial' } }
+      { initialProps: { hash: 'tx-initial' as string | null } }
     );
 
     expect(result.current.status).toBe('pending');

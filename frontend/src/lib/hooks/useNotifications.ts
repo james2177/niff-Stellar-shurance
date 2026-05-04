@@ -5,14 +5,20 @@
 //               + status-change notifications, privacy-safe copy,
 //                 in-app toast fallback, mute/snooze per claim
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 
 import type { ClaimFilters } from "@/components/claims/types";
 import type { ClaimBoard } from "@/lib/schemas/claims-board";
+import { toast } from "@/components/ui/use-toast";
 
 export interface NotificationPrefs {
   enabled: boolean;
   maxPerMinute?: number; // frequency cap (Req 10.3)
+}
+
+export interface ClaimStatusUpdate {
+  claimId: string;
+  status: string;
 }
 
 /**

@@ -59,7 +59,7 @@ async function fetchPolicy(policyId: string): Promise<PolicyDto> {
 }
 
 export function PolicyDetailClient({ initialPolicy, policyId }: PolicyDetailClientProps) {
-  const { connected, address } = useWallet()
+  const { connectionStatus, address } = useWallet()
   const { toast } = useToast()
   const queryClient = useQueryClient()
   
@@ -77,15 +77,17 @@ export function PolicyDetailClient({ initialPolicy, policyId }: PolicyDetailClie
   const secondsRemaining = ledgersRemaining * LEDGER_CLOSE_SECONDS
   const isInRenewalWindow = ledgersRemaining > 0 && ledgersRemaining <= RENEWAL_WINDOW_LEDGERS
   const isExpired = ledgersRemaining <= 0
+  const connected = connectionStatus === 'connected'
   const isHolder = connected && address === policy.holder
+  const beneficiary = (policy as PolicyDto & { beneficiary?: string | null }).beneficiary ?? null
 
-  const handleRenewSuccess = () => {
+  const handleRenewSuccess = (_txHash?: string) => {
     queryClient.invalidateQueries({ queryKey: ['policy', policyId] })
     toast({ title: 'Renewal submitted', description: 'Your policy renewal has been submitted successfully.' })
     setRenewModalOpen(false)
   }
 
-  const handleTerminateSuccess = () => {
+  const handleTerminateSuccess = (_txHash?: string) => {
     queryClient.invalidateQueries({ queryKey: ['policy', policyId] })
     toast({ title: 'Policy terminated', description: 'Your policy has been terminated.' })
     setTerminateModalOpen(false)
@@ -109,9 +111,9 @@ export function PolicyDetailClient({ initialPolicy, policyId }: PolicyDetailClie
             <div><p className="text-sm text-gray-500">Coverage Amount</p><p className="font-mono">{formatStroopsToXLM(policy.coverage_summary.coverage_amount)} XLM</p></div>
             <div><p className="text-sm text-gray-500">Premium</p><p className="font-mono">{formatStroopsToXLM(policy.coverage_summary.premium_amount)} XLM/yr</p></div>
             <div><p className="text-sm text-gray-500">Holder</p><p className="font-mono text-xs truncate">{policy.holder}</p></div>
-            <div><p className="text-sm text-gray-500">Beneficiary</p><p className="font-mono text-xs truncate">{policy.beneficiary || 'Not set — payouts go to holder'}</p></div>
+            <div><p className="text-sm text-gray-500">Beneficiary</p><p className="font-mono text-xs truncate">{beneficiary || 'Not set — payouts go to holder'}</p></div>
           </div>
-          {connected && policy.beneficiary && policy.beneficiary !== address && (
+          {connected && beneficiary && beneficiary !== address && (
             <div className="flex gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
               <AlertCircle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
               <div className="text-sm">
@@ -183,8 +185,8 @@ export function PolicyDetailClient({ initialPolicy, policyId }: PolicyDetailClie
 
       {isHolder && (
         <>
-          <RenewModal open={renewModalOpen} onOpenChange={setRenewModalOpen} policy={policy} onSuccess={handleRenewSuccess} />
-          <TerminateModal open={terminateModalOpen} onOpenChange={setTerminateModalOpen} policy={policy} onSuccess={handleTerminateSuccess} />
+          {renewModalOpen && <RenewModal policy={policy} onClose={() => setRenewModalOpen(false)} onSubmitted={handleRenewSuccess} />}
+          {terminateModalOpen && <TerminateModal policy={policy} onClose={() => setTerminateModalOpen(false)} onSubmitted={handleTerminateSuccess} />}
         </>
       )}
     </main>

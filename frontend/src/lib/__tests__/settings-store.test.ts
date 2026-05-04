@@ -20,7 +20,7 @@ describe('loadSettings', () => {
   })
 
   it('returns defaults when schema version mismatches', () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ _v: 0, network: 'public' }))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ _v: 0, network: 'mainnet' }))
     const s = loadSettings()
     expect(s.network).toBe('testnet') // default, not 'public'
   })
@@ -34,7 +34,7 @@ describe('loadSettings', () => {
   it('merges stored values over defaults', () => {
     const stored: AppSettings = {
       _v: 2,
-      network: 'public',
+      network: 'mainnet',
       customRpcUrl: null,
       rpcWarningAcknowledged: false,
       telemetryEnabled: false,
@@ -43,7 +43,7 @@ describe('loadSettings', () => {
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(stored))
     const s = loadSettings()
-    expect(s.network).toBe('public')
+    expect(s.network).toBe('mainnet')
     expect(s.displayCurrency).toBe('EUR')
     expect(s.notifications.renewalRemindersEnabled).toBe(false)
   })

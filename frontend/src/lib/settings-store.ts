@@ -31,12 +31,14 @@ export interface AppSettings {
 
 export const PUBLIC_RPC: Record<Network, string> = {
   testnet: 'https://soroban-testnet.stellar.org',
-  public: 'https://soroban-mainnet.stellar.org',
+  mainnet: 'https://soroban-mainnet.stellar.org',
+  futurenet: 'https://soroban-futurenet.stellar.org',
 }
 
 export const STATUS_PAGES: Record<Network, string> = {
   testnet: 'https://status.stellar.org',
-  public: 'https://status.stellar.org',
+  mainnet: 'https://status.stellar.org',
+  futurenet: 'https://status.stellar.org',
 }
 
 const DEFAULTS: AppSettings = {

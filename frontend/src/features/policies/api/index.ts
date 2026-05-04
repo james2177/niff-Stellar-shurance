@@ -31,6 +31,7 @@ export const PolicyDtoSchema = z.object({
     ledgers_remaining: z.number(),
     avg_ledger_close_seconds: z.literal(5),
   }),
+  beneficiary: z.string().nullable().optional(),
   claims: z.array(ClaimSummaryDtoSchema),
   _link: z.string(),
 });
