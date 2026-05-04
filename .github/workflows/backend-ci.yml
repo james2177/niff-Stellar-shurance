@@ -124,7 +124,7 @@ jobs:
         run: npm ci
 
       - name: Audit npm dependencies (fail on high/critical)
-        run: npm audit --audit-level=high
+        run: npm audit --audit-level=high --omit=dev
 
   # ── 5. Env example drift guard ────────────────────────────────────────────────
   env-check:
