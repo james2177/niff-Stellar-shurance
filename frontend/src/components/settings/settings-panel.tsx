@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { AlertTriangle, ChevronDown, ChevronUp, ExternalLink, Moon, RefreshCw, Sun, Unplug } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronUp, ExternalLink, Moon, PlayCircle, RefreshCw, Sun, Unplug } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,7 @@ import { SETTINGS_NETWORK_SECTION_ID } from '@/features/wallet/constants'
 import { getContracts } from '@/lib/network-manifest'
 import { validateRpcUrl, PUBLIC_RPC, STATUS_PAGES, type AppSettings } from '@/lib/settings-store'
 import type { Network } from '@/lib/network-manifest'
+import { resetTour, useOnboardingTour } from '@/hooks/use-onboarding-tour'
 
 const NETWORKS: Network[] = ['testnet', 'mainnet']
 const CURRENCIES: AppSettings['displayCurrency'][] = ['XLM', 'USD', 'EUR']
@@ -33,6 +34,8 @@ export function SettingsPanel() {
     address ?? null,
     jwt,
   )
+
+  const { startTour } = useOnboardingTour()
 
   function handleNetworkChange(network: Network) {
     update('network', network)
@@ -205,6 +208,24 @@ export function SettingsPanel() {
       </Card>
 
       {/* ── Advanced ──────────────────────────────────────────────────── */}
+
+      {/* ── Onboarding tour ───────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Onboarding tour</CardTitle>
+          <CardDescription>Replay the guided walkthrough of key features.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => { resetTour(); startTour() }}
+          >
+            <PlayCircle className="mr-2 h-4 w-4" aria-hidden="true" />
+            Replay tour
+          </Button>
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <button

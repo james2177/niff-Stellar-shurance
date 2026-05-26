@@ -287,6 +287,7 @@ export function ClaimVotePanel({ claimId }: ClaimVotePanelProps) {
           className="sticky-action-bar bg-background/95 backdrop-blur-sm border-t pt-3 -mx-4 px-4 sm:static sm:border-0 sm:bg-transparent sm:backdrop-blur-none sm:pt-0 sm:mx-0 sm:px-0"
           role="group"
           aria-label="Cast your vote"
+          data-tour="cast-vote"
         >
           <div className="flex gap-3">
             {/* Approve */}

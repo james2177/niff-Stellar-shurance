@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
+import { PrintButton } from '@/components/ui/print-button'
 import { getConfig } from '@/config/env'
 import { PolicyDtoSchema, type PolicyDto, type ClaimSummaryDto } from '../api'
 
@@ -97,7 +98,10 @@ export function PolicyDetailClient({ initialPolicy, policyId }: PolicyDetailClie
     <main className="mx-auto max-w-4xl px-4 py-8 space-y-6">
       <div className="flex items-center justify-between">
         <Link href="/policies" className="text-sm text-blue-600 hover:underline">← Policies</Link>
-        <Badge variant={policy.is_active ? 'default' : 'secondary'}>{policy.is_active ? 'Active' : 'Inactive'}</Badge>
+        <div className="flex items-center gap-2">
+          <PrintButton />
+          <Badge variant={policy.is_active ? 'default' : 'secondary'}>{policy.is_active ? 'Active' : 'Inactive'}</Badge>
+        </div>
       </div>
 
       <h1 className="text-3xl font-bold">Policy #{policy.policy_id}</h1>

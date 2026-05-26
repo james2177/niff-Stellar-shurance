@@ -77,6 +77,7 @@ export function WalletConnectButton() {
         disabled={isConnecting}
         size="sm"
         className="gap-2"
+        data-tour="connect-wallet"
       >
         <Wallet className="h-4 w-4" />
         {isConnecting ? 'Connecting…' : 'Connect Wallet'}

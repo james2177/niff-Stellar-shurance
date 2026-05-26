@@ -5,6 +5,7 @@ import { ClaimVotePanel } from '@/components/claims/claim-vote-panel'
 import { getConfig } from '@/config/env'
 import type { Claim } from '@/lib/schemas/vote'
 import { ClaimSchema } from '@/lib/schemas/vote'
+import { PrintButton } from '@/components/ui/print-button'
 
 interface ClaimPageProps {
   params: Promise<{ claimId: string }>
@@ -79,9 +80,12 @@ export default async function ClaimPage({ params }: ClaimPageProps) {
         paddingRight: 'max(1rem, env(safe-area-inset-right, 0px))',
       }}
     >
-      <h1 className="mb-6 text-xl font-bold">
-        Claim vote — <span className="font-mono text-base">{claimId}</span>
-      </h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-xl font-bold" data-tour="file-claim">
+          Claim vote — <span className="font-mono text-base">{claimId}</span>
+        </h1>
+        <PrintButton />
+      </div>
       <ClaimVotePanel claimId={claimId} />
     </main>
   )
