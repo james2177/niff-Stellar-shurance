@@ -3,7 +3,7 @@
 import './tracing'
 
 import { NestFactory } from "@nestjs/core";
-import { ValidationPipe, Logger } from "@nestjs/common";
+import { ValidationPipe, Logger, VersioningType } from "@nestjs/common";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
 import { AppModule } from "./app.module";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
@@ -69,8 +69,12 @@ async function bootstrap() {
   setRedisCacheMetricsService(metricsService);
   setRedisClientMetricsService(metricsService);
 
-  // Global prefix
+  // Global prefix + URI versioning (/api/v1/...)
   app.setGlobalPrefix("api");
+  app.enableVersioning({
+    type: VersioningType.URI,
+    defaultVersion: "1",
+  });
 
   // Security — Helmet tuned for a JSON-only API (no HTML served)
   app.use(
@@ -168,7 +172,7 @@ async function bootstrap() {
 
   await app.listen(port, "0.0.0.0");
   Logger.log(
-    `🚀 Application is running on: http://localhost:${port}/api`,
+    `🚀 Application is running on: http://localhost:${port}/api/v1`,
     "Bootstrap",
   );
   Logger.log(`📚 Swagger docs: http://localhost:${port}/docs`, "Bootstrap");
@@ -176,7 +180,7 @@ async function bootstrap() {
   if (graphqlEnabled) {
     const graphqlPath = configService.get<string>('GRAPHQL_PATH', '/graphql');
     Logger.log(
-      `🧭 GraphQL endpoint: http://localhost:${port}/api${graphqlPath}`,
+      `🧭 GraphQL endpoint: http://localhost:${port}/api/v1${graphqlPath}`,
       'Bootstrap',
     );
   }

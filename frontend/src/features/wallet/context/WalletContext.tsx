@@ -11,6 +11,8 @@ import React, {
 import { StellarWalletsKit, Networks, KitEventType } from '@creit.tech/stellar-wallets-kit'
 import { FreighterModule, FREIGHTER_ID } from '@creit.tech/stellar-wallets-kit/modules/freighter'
 import { xBullModule, XBULL_ID } from '@creit.tech/stellar-wallets-kit/modules/xbull'
+import { LobstrModule, LOBSTR_ID } from '@creit.tech/stellar-wallets-kit/modules/lobstr'
+import { LAST_WALLET_ID_STORAGE_KEY } from '../constants'
 import type { AppNetwork } from '@/config/networkManifest'
 import { passphraseToAppNetwork } from '@/config/networkManifest'
 import { toast } from '@/components/ui/use-toast'
@@ -19,7 +21,7 @@ import {
   type WalletNetworkResolution,
 } from '@/features/wallet/utils/networkMismatch'
 
-export type WalletId = typeof FREIGHTER_ID | typeof XBULL_ID
+export type WalletId = typeof FREIGHTER_ID | typeof XBULL_ID | typeof LOBSTR_ID
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 
 export interface WalletContextValue {
@@ -45,7 +47,6 @@ export interface WalletContextValue {
 
 const WalletContext = createContext<WalletContextValue | null>(null)
 
-const _LS_WALLET_KEY = 'niffyinsure:lastWalletId'
 const LS_NETWORK_KEY = 'niffyinsure:appNetwork'
 const LS_WALLET_SESSION = 'niffyinsur-wallet-session-v1'
 
@@ -63,7 +64,7 @@ function kitNetworkFor(app: AppNetwork): Networks {
 function initKit(appNetwork: AppNetwork) {
   StellarWalletsKit.init({
     network: kitNetworkFor(appNetwork),
-    modules: [new FreighterModule(), new xBullModule()],
+    modules: [new FreighterModule(), new xBullModule(), new LobstrModule()],
   })
 }
 
@@ -187,7 +188,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           walletId,
           publicKey: addr
         }))
-        
+        localStorage.setItem(LAST_WALLET_ID_STORAGE_KEY, walletId)
+
         await refreshWalletNetwork()
       }
     } catch (err: unknown) {
@@ -199,6 +201,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       } else {
         toast({ title: 'Connection failed', description: msg, variant: 'destructive' })
       }
+      throw err
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

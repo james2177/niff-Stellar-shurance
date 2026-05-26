@@ -1,4 +1,5 @@
 import { Module, MiddlewareConsumer, NestModule, RequestMethod } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { TerminusModule } from '@nestjs/terminus';
 import { ThrottlerModule, ThrottlerStorage } from '@nestjs/throttler';
@@ -30,6 +31,8 @@ import { AppLoggerService } from './common/logger/app-logger.service';
 import { OracleHooksController } from './experimental/oracle-hooks.controller';
 import { BetaCalculatorsController } from './experimental/beta-calculators.controller';
 import { IdempotencyMiddleware } from './common/middleware/idempotency.middleware';
+import { DeprecationHeadersInterceptor } from './common/versioning/deprecation-headers.interceptor';
+import { RejectUnversionedApiMiddleware } from './common/versioning/reject-unversioned-api.middleware';
 
 /** Mutation routes that require idempotency key support (issue #363). */
 const IDEMPOTENCY_ROUTES = [
@@ -82,10 +85,18 @@ const IDEMPOTENCY_ROUTES = [
     EventsModule,
   ],
   controllers: [OracleHooksController, BetaCalculatorsController],
-  providers: [RequestContextMiddleware, AppLoggerService],
+  providers: [
+    RequestContextMiddleware,
+    AppLoggerService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: DeprecationHeadersInterceptor,
+    },
+  ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RejectUnversionedApiMiddleware).forRoutes('*');
     consumer.apply(RequestContextMiddleware).forRoutes('*');
     // Apply idempotency middleware to all mutation endpoints (issue #363)
     consumer.apply(IdempotencyMiddleware).forRoutes(...IDEMPOTENCY_ROUTES);

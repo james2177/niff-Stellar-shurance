@@ -1,0 +1,14 @@
+---
+description: Git commit authorship — never add Cursor co-author trailers
+alwaysApply: true
+---
+
+# Git commits
+
+When creating or amending commits:
+
+- **Never** add `Co-authored-by: Cursor` or any `Co-authored-by:` trailer unless the user explicitly asks for it.
+- Commit messages must contain only the subject/body the user requested (e.g. `feat(scope): description (#issue)`).
+- Do not use flags or hooks that attribute commits to Cursor or other agents.
+
+Author and committer must remain the user's git identity only.

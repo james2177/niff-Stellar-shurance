@@ -1,7 +1,9 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { BetaCalculatorDto } from '../dto/beta-calculator.dto';
 import { Feature } from '../feature-flags/feature.decorator';
+import { DeprecatedApi } from '../common/versioning/deprecated-api.decorator';
 
+@DeprecatedApi()
 @Controller('experimental/beta-calculators')
 @Feature('experimental.betaCalculators')
 export class BetaCalculatorsController {

@@ -1,6 +1,8 @@
 export { WalletProvider, useWalletContext } from './context/WalletContext'
 export { useWallet } from './hooks/useWallet'
 export { WalletConnectButton } from './components/WalletConnectButton'
+export { WalletConnectModal } from './components/WalletConnectModal'
+export { LAST_WALLET_ID_STORAGE_KEY } from './constants'
 export { WalletAddress } from './components/WalletAddress'
 export { NetworkMismatchModal } from './components/NetworkMismatchModal'
 export { NetworkSelector } from './components/NetworkSelector'
