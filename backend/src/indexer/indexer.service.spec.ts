@@ -115,6 +115,131 @@ describe('IndexerService', () => {
     );
   });
 
+  // ── Gap alert deduplication tests ────────────────────────────────────────
+
+  it('first gap alert fires and upserts dedup row', async () => {
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+
+    const txOps = {
+      ledgerCursor: {
+        findUnique: jest.fn().mockResolvedValue({ lastProcessedLedger: 0 }),
+        upsert: jest.fn(),
+      },
+    };
+    const prisma = {
+      ledgerCursor: {
+        findUnique: jest.fn().mockResolvedValue({ network, lastProcessedLedger: 0, updatedAt: new Date() }),
+        create: jest.fn(),
+      },
+      indexerState: { findFirst: jest.fn() },
+      ledgerGapAlertDedup: {
+        findUnique: jest.fn().mockResolvedValue(null), // no prior alert
+        upsert: jest.fn(),
+      },
+      $transaction: jest.fn(async (fn: (t: typeof txOps) => Promise<void>) => fn(txOps)),
+    };
+    const soroban = {
+      getLatestLedger: jest.fn().mockResolvedValue(200),
+      getEvents: jest.fn().mockResolvedValue({ events: [] }),
+    };
+
+    const service = new IndexerService(prisma as never, soroban as never, makeConfig());
+    await service.processNextBatchForNetwork(network);
+
+    const gapLogs = warnSpy.mock.calls.filter(
+      (c) => typeof c[0] === 'string' && c[0].includes('indexer_ledger_gap'),
+    );
+    expect(gapLogs.length).toBe(1);
+    expect(prisma.ledgerGapAlertDedup.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { network } }),
+    );
+
+    warnSpy.mockRestore();
+  });
+
+  it('suppressed duplicate alert is logged with reason', async () => {
+    const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+
+    const txOps = {
+      ledgerCursor: {
+        findUnique: jest.fn().mockResolvedValue({ lastProcessedLedger: 0 }),
+        upsert: jest.fn(),
+      },
+    };
+    const prisma = {
+      ledgerCursor: {
+        findUnique: jest.fn().mockResolvedValue({ network, lastProcessedLedger: 0, updatedAt: new Date() }),
+        create: jest.fn(),
+      },
+      indexerState: { findFirst: jest.fn() },
+      ledgerGapAlertDedup: {
+        // Return a recent lastFiredAt so cooldown is still active
+        findUnique: jest.fn().mockResolvedValue({ network, lastFiredAt: new Date() }),
+        upsert: jest.fn(),
+      },
+      $transaction: jest.fn(async (fn: (t: typeof txOps) => Promise<void>) => fn(txOps)),
+    };
+    const soroban = {
+      getLatestLedger: jest.fn().mockResolvedValue(200),
+      getEvents: jest.fn().mockResolvedValue({ events: [] }),
+    };
+
+    const service = new IndexerService(prisma as never, soroban as never, makeConfig());
+    await service.processNextBatchForNetwork(network);
+
+    const suppressedLogs = logSpy.mock.calls.filter(
+      (c) => typeof c[0] === 'string' && c[0].includes('indexer_ledger_gap_suppressed'),
+    );
+    expect(suppressedLogs.length).toBe(1);
+    expect(suppressedLogs[0][0]).toContain('cooldown_active');
+    // Dedup row must NOT be updated when suppressed
+    expect(prisma.ledgerGapAlertDedup.upsert).not.toHaveBeenCalled();
+
+    logSpy.mockRestore();
+    jest.restoreAllMocks();
+  });
+
+  it('alert fires again after cooldown expires', async () => {
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+
+    const txOps = {
+      ledgerCursor: {
+        findUnique: jest.fn().mockResolvedValue({ lastProcessedLedger: 0 }),
+        upsert: jest.fn(),
+      },
+    };
+    // lastFiredAt is 2 hours ago — well past the 60 s cooldown
+    const expiredFiredAt = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const prisma = {
+      ledgerCursor: {
+        findUnique: jest.fn().mockResolvedValue({ network, lastProcessedLedger: 0, updatedAt: new Date() }),
+        create: jest.fn(),
+      },
+      indexerState: { findFirst: jest.fn() },
+      ledgerGapAlertDedup: {
+        findUnique: jest.fn().mockResolvedValue({ network, lastFiredAt: expiredFiredAt }),
+        upsert: jest.fn(),
+      },
+      $transaction: jest.fn(async (fn: (t: typeof txOps) => Promise<void>) => fn(txOps)),
+    };
+    const soroban = {
+      getLatestLedger: jest.fn().mockResolvedValue(200),
+      getEvents: jest.fn().mockResolvedValue({ events: [] }),
+    };
+
+    const service = new IndexerService(prisma as never, soroban as never, makeConfig());
+    await service.processNextBatchForNetwork(network);
+
+    const gapLogs = warnSpy.mock.calls.filter(
+      (c) => typeof c[0] === 'string' && c[0].includes('indexer_ledger_gap'),
+    );
+    expect(gapLogs.length).toBe(1);
+    expect(prisma.ledgerGapAlertDedup.upsert).toHaveBeenCalled();
+
+    warnSpy.mockRestore();
+  });
+
   it('deduplicates gap alerts within cooldown (staging outage simulation)', async () => {
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
 
