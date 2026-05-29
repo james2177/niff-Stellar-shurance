@@ -36,6 +36,7 @@ import { EVIDENCE_MAX_BYTES_DEFAULT } from './dto/evidence-upload.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { WalletAddress } from '../auth/decorators/wallet-address.decorator';
 import { RateLimitGuard } from '../rate-limit/rate-limit.guard';
+import { WalletRateLimitGuard } from '../rate-limit/wallet-rate-limit.guard';
 import { MAX_LIMIT, DEFAULT_LIMIT } from '../helpers/pagination';
 import { OptionalJwtAuthGuard } from '../tx/guards/optional-jwt.guard';
 
@@ -170,7 +171,7 @@ export class ClaimsController {
   }
 
   @Post('submit')
-  @UseGuards(RateLimitGuard)
+  @UseGuards(RateLimitGuard, WalletRateLimitGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Submit signed claim transaction' })
   @ApiResponse({ status: 200, description: 'Transaction submitted' })

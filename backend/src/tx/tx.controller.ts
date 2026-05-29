@@ -31,6 +31,7 @@ import { TxService } from './tx.service';
 import { BuildTxDto } from './dto/build-tx.dto';
 import { SubmitTxDto } from './dto/submit-tx.dto';
 import { OptionalJwtAuthGuard } from './guards/optional-jwt.guard';
+import { WalletRateLimitGuard } from '../rate-limit/wallet-rate-limit.guard';
 
 @ApiTags('Transactions')
 @Controller('tx')
@@ -83,7 +84,7 @@ export class TxController {
   @Post('submit')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
-  @UseGuards(OptionalJwtAuthGuard)
+  @UseGuards(OptionalJwtAuthGuard, WalletRateLimitGuard)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Submit signed XDR to the Stellar network',
