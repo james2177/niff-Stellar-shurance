@@ -223,6 +223,14 @@ export class IndexerService {
     if (dedup) {
       const elapsed = now.getTime() - dedup.lastFiredAt.getTime();
       if (elapsed < this.gapCooldownMs) {
+        this.logger.log(
+          JSON.stringify({
+            event: 'indexer_ledger_gap_suppressed',
+            network,
+            reason: 'cooldown_active',
+            cooldownRemainingMs: this.gapCooldownMs - elapsed,
+          }),
+        );
         return;
       }
     }
