@@ -99,6 +99,12 @@ impl NiffyInsure {
         soroban_sdk::String::from_str(&env, env!("CARGO_PKG_VERSION"))
     }
 
+    /// Read-only: on-chain WASM hash for this deployed contract.
+    /// The returned value is the canonical hash used by the deployment registry and RPC tooling.
+    pub fn get_wasm_hash(env: Env) -> soroban_sdk::BytesN<32> {
+        env.deployer().current_contract_wasm_hash()
+    }
+
     /// Read-only: balance of the default payout token held by this contract (payout reserve).
     /// Matches funds available for `process_claim` for the configured default asset.
     pub fn get_treasury_balance(env: Env) -> i128 {
