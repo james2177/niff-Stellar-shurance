@@ -122,6 +122,7 @@ describe('IndexerService', () => {
     };
     const claimEvents = { publish: jest.fn().mockResolvedValue(undefined) };
     const claimSummaryCache = { invalidateClaim: jest.fn().mockResolvedValue(undefined) };
+    const votePubSub = { publishVote: jest.fn().mockResolvedValue(undefined) };
     const service = new IndexerService(
       {} as never,
       {} as never,
@@ -130,6 +131,7 @@ describe('IndexerService', () => {
       claimEvents as never,
       undefined,
       claimSummaryCache as never,
+      votePubSub as never,
     );
 
     await (service as unknown as {
@@ -151,6 +153,14 @@ describe('IndexerService', () => {
       expect.objectContaining({ where: { id: 42 } }),
     );
     expect(claimSummaryCache.invalidateClaim).toHaveBeenCalledWith(42);
+    expect(votePubSub.publishVote).toHaveBeenCalledWith({
+      claimId: 42,
+      voter: 'GVOTER',
+      vote: 'yes',
+      yesVotes: 2,
+      noVotes: 1,
+      totalVotes: 3,
+    });
   });
 
   // ── Gap alert deduplication tests ────────────────────────────────────────

@@ -12,6 +12,7 @@ import { EventsModule } from '../events/events.module';
 import { CacheModule } from '../cache/cache.module';
 import { MetricsModule } from '../metrics/metrics.module';
 import { ClaimSummaryCacheService } from '../claims/services/claim-summary-cache.service';
+import { VotePubSubService } from '../graphql/vote-pubsub.service';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { ClaimSummaryCacheService } from '../claims/services/claim-summary-cache
     BackfillWorkerService,
     ReconciliationService,
     ClaimSummaryCacheService,
+    VotePubSubService,
   ],
   exports: [IndexerService, ReconciliationService],
 })

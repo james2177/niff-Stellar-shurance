@@ -14,6 +14,7 @@ import { rpc as SorobanRpc, scValToNative } from '@stellar/stellar-sdk';
 import { tryNormalizeAddress } from '../common/utils/normalize-address';
 import { QuoteSimulationCacheService } from '../quote/quote-simulation-cache.service';
 import { ClaimSummaryCacheService } from '../claims/services/claim-summary-cache.service';
+import { VotePubSubService } from '../graphql/vote-pubsub.service';
 
 type IndexerTx = Prisma.TransactionClient;
 type SorobanEvent = SorobanRpc.Api.EventResponse;
@@ -97,6 +98,7 @@ export class IndexerService {
     @Optional() private readonly claimEvents?: ClaimEventsService,
     @Optional() private readonly quoteSimulationCache?: QuoteSimulationCacheService,
     @Optional() private readonly claimSummaryCache?: ClaimSummaryCacheService,
+    @Optional() private readonly votePubSub?: VotePubSubService,
   ) {
     this.networkId = this.config.get<string>('STELLAR_NETWORK', 'testnet');
     this.gapThresholdLedgers = this.config.get<number>('INDEXER_GAP_ALERT_THRESHOLD_LEDGERS', 100);
@@ -532,6 +534,14 @@ export class IndexerService {
       ledger: event.ledger,
     });
     await this.claimSummaryCache?.invalidateClaim(claimId);
+    await this.votePubSub?.publishVote({
+      claimId,
+      voter,
+      vote: option === 'Approve' ? 'yes' : 'no',
+      yesVotes: getNumberValue(data.approve_votes),
+      noVotes: getNumberValue(data.reject_votes),
+      totalVotes: getNumberValue(data.approve_votes) + getNumberValue(data.reject_votes),
+    });
   }
 
   private async handleClaimProcessed(tx: IndexerTx, data: EventPayload, event: SorobanEvent) {
