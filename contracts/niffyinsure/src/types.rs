@@ -81,6 +81,21 @@ pub enum PolicyType {
     Property,
 }
 
+/// Per-policy-type admin configuration stored in the registry.
+///
+/// `payout_asset_override`: when `Some(asset)`, approved claims for this policy type
+/// are paid out in `asset` instead of the policy's premium asset. The override asset
+/// must be allowlisted at the time it is configured (validated in the admin setter).
+///
+/// When `None`, payout falls back to the policy's bound premium asset (existing behaviour).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PolicyTypeConfig {
+    /// Optional SEP-41 asset contract to use for claim payouts.
+    /// Must be allowlisted when set. `None` = use premium asset (default).
+    pub payout_asset_override: Option<Address>,
+}
+
 #[contracttype]
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum RegionTier {

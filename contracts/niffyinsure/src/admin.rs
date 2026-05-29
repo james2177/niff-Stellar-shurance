@@ -53,6 +53,8 @@ pub enum AdminError {
     SweepNoticePeriodActive = 116,
     /// Max evidence count outside the absolute hard bound.
     MaxEvidenceCountOutOfBounds = 117,
+    /// Payout asset override is not allowlisted.
+    PayoutAssetOverrideNotAllowlisted = 118,
 }
 
 /// Payload for a treasury-rotation proposal.

@@ -783,6 +783,19 @@ fn payout(env: &Env, claim: &Claim) -> Result<(), Error> {
         return Err(Error::InvalidAsset);
     }
 
+    // Resolve effective payout asset: use PolicyTypeConfig override when set,
+    // otherwise fall back to the policy's bound premium asset.
+    let type_config = storage::get_policy_type_config(env, &policy.policy_type);
+    let effective_asset = type_config
+        .as_ref()
+        .and_then(|c| c.payout_asset_override.clone())
+        .unwrap_or_else(|| policy.asset.clone());
+
+    // The override asset must also be allowlisted at payout time.
+    if !storage::is_allowed_asset(env, &effective_asset) {
+        return Err(Error::InvalidAsset);
+    }
+
     let gross = claim.amount;
     let deductible = claim.deductible;
     let net = gross.checked_sub(deductible).ok_or(Error::Overflow)?;
@@ -791,7 +804,7 @@ fn payout(env: &Env, claim: &Claim) -> Result<(), Error> {
         return Err(Error::ClaimAmountZero);
     }
 
-    if !crate::token::check_balance(env, &policy.asset, net) {
+    if !crate::token::check_balance(env, &effective_asset, net) {
         return Err(Error::InsufficientTreasury);
     }
 
@@ -800,9 +813,21 @@ fn payout(env: &Env, claim: &Claim) -> Result<(), Error> {
         .clone()
         .unwrap_or_else(|| policy.holder.clone());
 
+    // Emit override event before the transfer so indexers see the asset decision first.
+    let override_active = effective_asset != policy.asset;
+    if override_active {
+        crate::events::emit_payout_asset_override_applied(
+            env,
+            claim.claim_id,
+            policy.policy_type.clone(),
+            &policy.asset,
+            &effective_asset,
+        );
+    }
+
     crate::token::transfer(
         env,
-        &policy.asset,
+        &effective_asset,
         &env.current_contract_address(),
         &payout_to,
         net,

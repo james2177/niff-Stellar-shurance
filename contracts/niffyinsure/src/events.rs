@@ -481,3 +481,43 @@ pub fn emit_drained(env: &Env, admin: &Address, recipient: &Address, amount: i12
     }
     .publish(env);
 }
+
+// ── Payout asset override event ───────────────────────────────────────────────
+
+/// Emitted by `process_claim` when a `PolicyTypeConfig.payout_asset_override` is applied.
+///
+/// topics: ("niffyinsure", "payout_asset_override_applied", claim_id)
+/// payload: { version, policy_type, premium_asset, payout_asset }
+///
+/// Indexers should surface this event so holders can see that their payout
+/// was settled in a different asset than the one used for their premium.
+#[contractevent(topics = ["niffyinsure", "payout_asset_override_applied"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PayoutAssetOverrideApplied {
+    #[topic]
+    pub claim_id: u64,
+    pub version: u32,
+    /// The policy type whose config triggered the override.
+    pub policy_type: crate::types::PolicyType,
+    /// Asset the premium was paid in (policy's bound asset).
+    pub premium_asset: Address,
+    /// Asset the payout was sent in (the override asset).
+    pub payout_asset: Address,
+}
+
+pub fn emit_payout_asset_override_applied(
+    env: &Env,
+    claim_id: u64,
+    policy_type: crate::types::PolicyType,
+    premium_asset: &Address,
+    payout_asset: &Address,
+) {
+    PayoutAssetOverrideApplied {
+        claim_id,
+        version: EVENT_SCHEMA_VERSION,
+        policy_type,
+        premium_asset: premium_asset.clone(),
+        payout_asset: payout_asset.clone(),
+    }
+    .publish(env);
+}
