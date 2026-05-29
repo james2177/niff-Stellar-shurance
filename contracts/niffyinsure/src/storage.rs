@@ -155,6 +155,10 @@ pub enum DataKey {
     // ── Policy type registry ──────────────────────────────────────────────────
     /// Admin-configurable per-policy-type settings (instance storage).
     PolicyTypeConfig(crate::types::PolicyType),
+    // ── Per-asset premium table ───────────────────────────────────────────────
+    /// Asset-specific multiplier table keyed by SEP-41 asset contract address.
+    /// Falls back to the global `PremiumTable` when absent.
+    AssetPremiumTable(Address),
 }
 pub fn has_open_claim(env: &Env, holder: &Address, policy_id: u32) -> bool {
     env.storage()
@@ -1200,6 +1204,37 @@ pub fn set_policy_type_config(
     env.storage()
         .instance()
         .set(&DataKey::PolicyTypeConfig(policy_type.clone()), config);
+}
+
+// ── Per-asset premium table (instance) ───────────────────────────────────────
+
+/// Get the asset-specific multiplier table for `asset`.
+/// Returns `None` when no asset-specific table has been set (caller should fall back to default).
+pub fn get_asset_premium_table(
+    env: &Env,
+    asset: &Address,
+) -> Option<crate::types::MultiplierTable> {
+    env.storage()
+        .instance()
+        .get(&DataKey::AssetPremiumTable(asset.clone()))
+}
+
+/// Persist an asset-specific multiplier table.
+pub fn set_asset_premium_table(
+    env: &Env,
+    asset: &Address,
+    table: &crate::types::MultiplierTable,
+) {
+    env.storage()
+        .instance()
+        .set(&DataKey::AssetPremiumTable(asset.clone()), table);
+}
+
+/// Remove an asset-specific multiplier table (reverts to global default).
+pub fn remove_asset_premium_table(env: &Env, asset: &Address) {
+    env.storage()
+        .instance()
+        .remove(&DataKey::AssetPremiumTable(asset.clone()));
 }
 
 // ── Non-experimental stubs (panic guards) ────────────────────────────────────
