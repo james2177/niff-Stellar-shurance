@@ -1,4 +1,4 @@
-use soroban_sdk::{contracttype, Address, Env, Vec};
+use soroban_sdk::{contracttype, Address, Env, Map, String, Vec};
 
 use crate::ledger;
 use crate::types::{Claim, MultiplierTable, Policy, RollingClaimWindowState, VoteOption};
@@ -152,6 +152,22 @@ pub enum DataKey {
     // ── Rolling claim cap (persistent) ───────────────────────────────────────
     /// Per-policy rolling window accumulator: (holder, policy_id) → RollingClaimWindowState.
     RollingClaimState(Address, u32),
+    // ── Region registry (instance) ────────────────────────────────────────────
+    /// Admin-managed map of region code (String) → RegionConfig.
+    RegionRegistry,
+    // ── Treatment tracking (persistent) ──────────────────────────────────────
+    /// Total treatment count for a pet (keyed by pet_id: u64).
+    TreatmentCount(u64),
+    // ── Vet specialization registry (persistent) ──────────────────────────────
+    /// Admin-verified specializations for a vet address.
+    VetSpecializations(Address),
+    // ── Event subscription filter system (persistent) ─────────────────────────
+    /// Monotonically increasing subscription ID counter (instance).
+    SubscriptionCounter,
+    /// Subscription record keyed by subscription ID.
+    Subscription(u64),
+    /// List of active subscription IDs per owner address.
+    OwnerSubscriptions(Address),
 }
 
 pub fn has_open_claim(env: &Env, holder: &Address, policy_id: u32) -> bool {
@@ -1211,4 +1227,131 @@ pub fn is_oracle_enabled(_env: &Env) -> bool {
 #[cfg(not(feature = "experimental"))]
 pub fn set_oracle_enabled(_env: &Env, _enabled: bool) {
     panic!("ORACLE_TRIGGERS_DISABLED")
+}
+
+// ── Region registry ───────────────────────────────────────────────────────────
+
+pub fn get_region_registry(env: &Env) -> Map<String, crate::types::RegionConfig> {
+    env.storage()
+        .instance()
+        .get(&DataKey::RegionRegistry)
+        .unwrap_or_else(|| Map::new(env))
+}
+
+pub fn set_region_registry(env: &Env, registry: &Map<String, crate::types::RegionConfig>) {
+    env.storage()
+        .instance()
+        .set(&DataKey::RegionRegistry, registry);
+}
+
+pub fn get_region_config(env: &Env, code: &String) -> Option<crate::types::RegionConfig> {
+    get_region_registry(env).get(code.clone())
+}
+
+// ── Treatment tracking ────────────────────────────────────────────────────────
+
+pub fn get_treatment_count(env: &Env, pet_id: u64) -> u64 {
+    env.storage()
+        .persistent()
+        .get(&DataKey::TreatmentCount(pet_id))
+        .unwrap_or(0u64)
+}
+
+pub fn increment_treatment_count(env: &Env, pet_id: u64) -> u64 {
+    let key = DataKey::TreatmentCount(pet_id);
+    let count: u64 = env.storage().persistent().get(&key).unwrap_or(0u64) + 1;
+    env.storage().persistent().set(&key, &count);
+    env.storage()
+        .persistent()
+        .extend_ttl(&key, PERSISTENT_TTL_THRESHOLD, PERSISTENT_TTL_EXTEND_TO);
+    count
+}
+
+// ── Vet specialization registry ───────────────────────────────────────────────
+
+pub fn get_vet_specializations(
+    env: &Env,
+    vet: &Address,
+) -> Vec<crate::types::Specialization> {
+    env.storage()
+        .persistent()
+        .get(&DataKey::VetSpecializations(vet.clone()))
+        .unwrap_or_else(|| Vec::new(env))
+}
+
+pub fn set_vet_specializations(
+    env: &Env,
+    vet: &Address,
+    specs: &Vec<crate::types::Specialization>,
+) {
+    let key = DataKey::VetSpecializations(vet.clone());
+    env.storage().persistent().set(&key, specs);
+    env.storage()
+        .persistent()
+        .extend_ttl(&key, PERSISTENT_TTL_THRESHOLD, PERSISTENT_TTL_EXTEND_TO);
+}
+
+pub fn vet_has_specialization(
+    env: &Env,
+    vet: &Address,
+    spec: &crate::types::Specialization,
+) -> bool {
+    get_vet_specializations(env, vet)
+        .iter()
+        .any(|s| s == *spec)
+}
+
+// ── Event subscription filter system ─────────────────────────────────────────
+
+pub fn next_subscription_id(env: &Env) -> u64 {
+    let id: u64 = env
+        .storage()
+        .instance()
+        .get(&DataKey::SubscriptionCounter)
+        .unwrap_or(0u64)
+        + 1;
+    env.storage()
+        .instance()
+        .set(&DataKey::SubscriptionCounter, &id);
+    id
+}
+
+pub fn get_subscription(env: &Env, id: u64) -> Option<crate::types::Subscription> {
+    env.storage()
+        .persistent()
+        .get(&DataKey::Subscription(id))
+}
+
+pub fn set_subscription(env: &Env, sub: &crate::types::Subscription) {
+    let key = DataKey::Subscription(sub.id);
+    env.storage().persistent().set(&key, sub);
+    env.storage()
+        .persistent()
+        .extend_ttl(&key, PERSISTENT_TTL_THRESHOLD, PERSISTENT_TTL_EXTEND_TO);
+}
+
+pub fn remove_subscription(env: &Env, id: u64) {
+    env.storage().persistent().remove(&DataKey::Subscription(id));
+}
+
+pub fn get_owner_subscription_ids(
+    env: &Env,
+    owner: &Address,
+) -> Vec<u64> {
+    env.storage()
+        .persistent()
+        .get(&DataKey::OwnerSubscriptions(owner.clone()))
+        .unwrap_or_else(|| Vec::new(env))
+}
+
+pub fn set_owner_subscription_ids(
+    env: &Env,
+    owner: &Address,
+    ids: &Vec<u64>,
+) {
+    let key = DataKey::OwnerSubscriptions(owner.clone());
+    env.storage().persistent().set(&key, ids);
+    env.storage()
+        .persistent()
+        .extend_ttl(&key, PERSISTENT_TTL_THRESHOLD, PERSISTENT_TTL_EXTEND_TO);
 }

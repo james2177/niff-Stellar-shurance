@@ -58,6 +58,8 @@ pub enum PolicyError {
     Expired = 118,
     /// Supplied `expected_nonce` does not match the holder's current on-chain nonce.
     NonceMismatch = 119,
+    /// Region code not found in the admin-managed region registry, or region is deactivated.
+    InvalidRegion = 121,
 }
 
 #[contracttype]
@@ -270,6 +272,7 @@ pub fn initiate_policy(
     beneficiary: Option<Address>,
     deductible: Option<i128>,
     expected_nonce: Option<u64>,
+    region_code: Option<String>,
 ) -> Result<Policy, PolicyError> {
     // Check granular pause: policy binding should be blocked if bind_paused
     storage::assert_bind_not_paused(env);
@@ -278,6 +281,20 @@ pub fn initiate_policy(
     if !storage::is_allowed_asset(env, &asset) {
         return Err(PolicyError::AssetNotAllowed);
     }
+
+    // Region registry validation: if the registry is non-empty, the supplied
+    // region_code must exist and be active.
+    let region_registry = storage::get_region_registry(env);
+    let region_risk_multiplier = if region_registry.len() == 0 {
+        premium::SCALE
+    } else {
+        let code = region_code.ok_or(PolicyError::InvalidRegion)?;
+        let config = region_registry.get(code).ok_or(PolicyError::InvalidRegion)?;
+        if !config.active {
+            return Err(PolicyError::InvalidRegion);
+        }
+        config.risk_multiplier
+    };
 
     holder.require_auth();
 
@@ -317,7 +334,13 @@ pub fn initiate_policy(
                 }
                 _ => PolicyError::PremiumOverflow,
             })?;
-    let premium_amount = quote.total_premium;
+    let premium_amount = premium::checked_mul_ratio(
+        quote.total_premium,
+        region_risk_multiplier,
+        premium::SCALE,
+        premium::Rounding::Ceil,
+    )
+    .map_err(|_| PolicyError::PremiumOverflow)?;
     if premium_amount <= 0 {
         return Err(PolicyError::InvalidPremium);
     }
