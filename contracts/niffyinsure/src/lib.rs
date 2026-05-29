@@ -5,6 +5,7 @@ pub mod admin;
 mod calculator;
 mod claim;
 pub mod commit_reveal;
+pub mod delegation;
 pub mod events;
 mod governance_token;
 mod ledger;
@@ -51,6 +52,21 @@ struct AllowedAssetUpdated {
 struct VotingDurationUpdated {
     pub old_ledgers: u32,
     pub new_ledgers: u32,
+}
+
+#[contractevent(topics = ["niffyinsure", "asset_claim_bounds_updated"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AssetClaimBoundsUpdated {
+    #[topic]
+    pub asset: Address,
+    pub min_claim_amount: i128,
+    pub max_claim_amount: i128,
+}
+
+#[contractevent(topics = ["niffyinsure", "reinsurance_contract_updated"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ReinsuranceContractUpdated {
+    pub reinsurance_contract: Address,
 }
 
 #[contractevent(topics = ["niffyinsure", "quorum_updated"])]
@@ -977,6 +993,124 @@ impl NiffyInsure {
     ) -> Result<(), AdminError> {
         let _admin = admin::require_admin(&env);
         rolling_claim_cap::try_set_window_ledgers(&env, window_ledgers)
+    }
+
+    // ── Issue #583: Claim fraud score ─────────────────────────────────────────
+
+    /// Admin or delegated oracle: set fraud score (0–100) for a claim.
+    /// High-score claims require elevated quorum at finalization.
+    pub fn set_claim_fraud_score(
+        env: Env,
+        caller: Address,
+        claim_id: u64,
+        score: u32,
+    ) -> Result<(), validate::Error> {
+        caller.require_auth();
+        claim::set_claim_fraud_score(&env, &caller, claim_id, score)
+    }
+
+    /// Read the fraud score for a claim (None if not set).
+    pub fn get_claim_fraud_score(env: Env, claim_id: u64) -> Option<u32> {
+        storage::get_claim_fraud_score(&env, claim_id)
+    }
+
+    /// Admin: set the fraud score threshold above which elevated quorum applies.
+    pub fn admin_set_fraud_score_threshold(env: Env, threshold: u32) -> Result<(), validate::Error> {
+        let _admin = admin::require_admin(&env);
+        if threshold > 100 {
+            return Err(validate::Error::SafetyScoreOutOfRange);
+        }
+        storage::set_fraud_score_threshold(&env, threshold);
+        Ok(())
+    }
+
+    /// Admin: set the elevated quorum bps used when fraud score exceeds threshold.
+    pub fn admin_set_elevated_quorum_bps(env: Env, bps: u32) -> Result<(), validate::Error> {
+        let _admin = admin::require_admin(&env);
+        validate::validate_quorum_bps(bps)?;
+        storage::set_elevated_quorum_bps(&env, bps);
+        Ok(())
+    }
+
+    // ── Issue #587: Asset-specific claim amount bounds ────────────────────────
+
+    /// Admin: set min/max claim amount bounds for an asset.
+    /// Dust claims below min and over-coverage claims above max will revert.
+    pub fn admin_set_asset_claim_bounds(
+        env: Env,
+        asset: Address,
+        min_claim_amount: i128,
+        max_claim_amount: i128,
+    ) -> Result<(), validate::Error> {
+        let _admin = admin::require_admin(&env);
+        if min_claim_amount < 0 || max_claim_amount < min_claim_amount {
+            return Err(validate::Error::ClaimAmountZero);
+        }
+        storage::set_allowed_asset_config(
+            &env,
+            &asset,
+            &types::AllowedAssetConfig { min_claim_amount, max_claim_amount },
+        );
+        AssetClaimBoundsUpdated {
+            asset,
+            min_claim_amount,
+            max_claim_amount,
+        }
+        .publish(&env);
+        Ok(())
+    }
+
+    /// Read the asset-specific claim bounds (None if not configured).
+    pub fn get_asset_claim_bounds(env: Env, asset: Address) -> Option<types::AllowedAssetConfig> {
+        storage::get_allowed_asset_config(&env, &asset)
+    }
+
+    // ── Issue #585: Admin role delegation ────────────────────────────────────
+
+    /// Admin: grant a temporary delegation to `operator` with specific permissions.
+    pub fn grant_delegation(
+        env: Env,
+        operator: Address,
+        expiry_ledger: u32,
+        permissions: types::DelegationPermissions,
+    ) -> Result<(), validate::Error> {
+        let admin = admin::require_admin(&env);
+        delegation::grant_delegation(&env, &admin, &operator, expiry_ledger, permissions)
+    }
+
+    /// Admin: revoke a delegation before it expires.
+    pub fn revoke_delegation(env: Env, operator: Address) {
+        let admin = admin::require_admin(&env);
+        delegation::revoke_delegation(&env, &admin, &operator);
+    }
+
+    /// Read a delegation record (None if not set or expired).
+    pub fn get_delegation(env: Env, operator: Address) -> Option<types::DelegationRecord> {
+        delegation::get_delegation(&env, &operator)
+    }
+
+    // ── Issue #581: Reinsurance pool ──────────────────────────────────────────
+
+    /// Admin: set the reinsurance contract address.
+    /// When primary treasury is insufficient, overflow is drawn from this contract.
+    pub fn admin_set_reinsurance_contract(env: Env, reinsurance: Address) {
+        let _admin = admin::require_admin(&env);
+        storage::set_reinsurance_contract(&env, &reinsurance);
+        ReinsuranceContractUpdated {
+            reinsurance_contract: reinsurance,
+        }
+        .publish(&env);
+    }
+
+    /// Admin: clear the reinsurance contract (disables reinsurance fallback).
+    pub fn admin_clear_reinsurance_contract(env: Env) {
+        let _admin = admin::require_admin(&env);
+        storage::clear_reinsurance_contract(&env);
+    }
+
+    /// Read the configured reinsurance contract address (None if not set).
+    pub fn get_reinsurance_contract(env: Env) -> Option<Address> {
+        storage::get_reinsurance_contract(&env)
     }
 }
 

@@ -300,6 +300,16 @@ pub fn file_claim(
     crate::validate::check_claim_fields(env, amount, policy.coverage, details, evidence)?;
     crate::rolling_claim_cap::check_file_claim(env, holder, policy_id, amount, now)?;
 
+    // Issue #587: validate against asset-specific min/max bounds
+    if let Some(asset_config) = storage::get_allowed_asset_config(env, &policy.asset) {
+        if amount < asset_config.min_claim_amount {
+            return Err(Error::ClaimBelowMinAmount);
+        }
+        if amount > asset_config.max_claim_amount {
+            return Err(Error::ClaimAboveMaxAmount);
+        }
+    }
+
     let deductible_snapshot = policy.deductible.unwrap_or(0);
 
     let duration = storage::get_voting_duration_ledgers(env);
@@ -467,7 +477,7 @@ pub fn vote_on_claim(
 
     let eligible = claim.eligible_voter_count;
     let cast = claim.approve_votes + claim.reject_votes;
-    let quorum_bps = storage::get_claim_quorum_bps(env, claim_id);
+    let quorum_bps = effective_quorum_bps(env, claim_id);
     if let Some(res) = resolve_plurality_if_quorum_met(
         claim.approve_votes,
         claim.reject_votes,
@@ -547,7 +557,7 @@ fn finalize_claim_inner(env: &Env, claim_id: u64) -> Result<ClaimStatus, Error> 
 
     let eligible = claim.eligible_voter_count;
     let cast = claim.approve_votes + claim.reject_votes;
-    let quorum_bps = storage::get_claim_quorum_bps(env, claim_id);
+    let quorum_bps = effective_quorum_bps(env, claim_id);
 
     if participation_quorum_met(cast, eligible, quorum_bps) {
         if claim.approve_votes > claim.reject_votes {
@@ -806,10 +816,6 @@ fn payout(env: &Env, claim: &Claim) -> Result<(), Error> {
         return Err(Error::ClaimAmountZero);
     }
 
-    if !crate::token::check_balance(env, &effective_asset, net) {
-        return Err(Error::InsufficientTreasury);
-    }
-
     let payout_to = policy
         .beneficiary
         .clone()
@@ -827,13 +833,52 @@ fn payout(env: &Env, claim: &Claim) -> Result<(), Error> {
         );
     }
 
-    crate::token::transfer(
-        env,
-        &effective_asset,
-        &env.current_contract_address(),
-        &payout_to,
-        net,
-    );
+    // Issue #581: attempt primary treasury; if insufficient, draw from reinsurance.
+    let primary_balance = crate::token::get_balance(env, &effective_asset);
+    if primary_balance >= net {
+        crate::token::transfer(
+            env,
+            &effective_asset,
+            &env.current_contract_address(),
+            &payout_to,
+            net,
+        );
+    } else {
+        // Primary treasury insufficient — try reinsurance
+        let reinsurance = storage::get_reinsurance_contract(env)
+            .ok_or(Error::NoReinsuranceConfigured)?;
+
+        let primary_amount = primary_balance.max(0);
+        let reinsurance_amount = net.checked_sub(primary_amount).ok_or(Error::Overflow)?;
+
+        // Transfer whatever is available from primary
+        if primary_amount > 0 {
+            crate::token::transfer(
+                env,
+                &effective_asset,
+                &env.current_contract_address(),
+                &payout_to,
+                primary_amount,
+            );
+        }
+
+        // Draw remainder from reinsurance pool
+        crate::token::transfer_from_reinsurance(
+            env,
+            &effective_asset,
+            &reinsurance,
+            &payout_to,
+            reinsurance_amount,
+        );
+
+        crate::types::ReinsuranceDrawdown {
+            claim_id: claim.claim_id,
+            primary_amount,
+            reinsurance_amount,
+            reinsurance_contract: reinsurance,
+        }
+        .publish(env);
+    }
 
     ClaimProcessed {
         claim_id: claim.claim_id,
@@ -860,6 +905,74 @@ pub fn get_claim_history(env: &Env, claim_id: u64) -> Result<Vec<ClaimStatusHist
 
 pub fn set_allowed_asset(env: &Env, asset: &Address, allowed: bool) {
     storage::set_allowed_asset(env, asset, allowed);
+}
+
+// ── Issue #583: Fraud score ───────────────────────────────────────────────────
+
+/// Emitted when a fraud score is set for a claim.
+#[contractevent(topics = ["niffyinsure", "claim_fraud_score_set"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ClaimFraudScoreSet {
+    #[topic]
+    pub claim_id: u64,
+    pub score: u32,
+    pub set_by: Address,
+    pub at_ledger: u32,
+}
+
+/// Admin or oracle: set the fraud score for a claim (0–100).
+/// Requires admin auth or a valid delegation with `can_set_fraud_score`.
+pub fn set_claim_fraud_score(
+    env: &Env,
+    caller: &Address,
+    claim_id: u64,
+    score: u32,
+) -> Result<(), Error> {
+    if score > 100 {
+        return Err(Error::SafetyScoreOutOfRange);
+    }
+    // Verify claim exists
+    let _ = storage::get_claim(env, claim_id).ok_or(Error::ClaimNotFound)?;
+
+    let admin = storage::get_admin(env);
+    if *caller != admin {
+        // Check delegation
+        let delegation = storage::get_delegation(env, caller)
+            .ok_or(Error::DelegationInvalid)?;
+        let now = env.ledger().sequence();
+        if now > delegation.expiry_ledger {
+            return Err(Error::DelegationInvalid);
+        }
+        if !delegation.permissions.can_set_fraud_score {
+            return Err(Error::DelegationPermissionDenied);
+        }
+    }
+
+    storage::set_claim_fraud_score(env, claim_id, score);
+
+    ClaimFraudScoreSet {
+        claim_id,
+        score,
+        set_by: caller.clone(),
+        at_ledger: env.ledger().sequence(),
+    }
+    .publish(env);
+
+    Ok(())
+}
+
+/// Returns the effective quorum bps for a claim, applying elevated quorum
+/// when a fraud score exceeds the configured threshold.
+pub fn effective_quorum_bps(env: &Env, claim_id: u64) -> u32 {
+    let base = storage::get_claim_quorum_bps(env, claim_id);
+    if let Some(score) = storage::get_claim_fraud_score(env, claim_id) {
+        let threshold = storage::get_fraud_score_threshold(env);
+        if score > threshold {
+            let elevated = storage::get_elevated_quorum_bps(env);
+            return elevated.max(base);
+        }
+    }
+    base
 }
 
 #[cfg(test)]

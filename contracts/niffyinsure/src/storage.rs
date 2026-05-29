@@ -159,6 +159,28 @@ pub enum DataKey {
     CommitRevealPhases(u64),
     /// Voter's 32-byte commitment hash: SHA-256(vote_byte || salt).
     VoteCommitment(u64, Address),
+    // ── Policy type config (instance) ────────────────────────────────────────
+    /// Per-policy-type admin configuration (e.g. payout asset override).
+    PolicyTypeConfig(crate::types::PolicyType),
+    // ── Per-asset premium table (instance) ───────────────────────────────────
+    /// Asset-specific multiplier table; falls back to global when absent.
+    AssetPremiumTable(Address),
+    // ── Issue #583: Claim fraud score ─────────────────────────────────────────
+    /// Fraud score (0–100) set by oracle/admin for a specific claim.
+    ClaimFraudScore(u64),
+    /// Configurable threshold above which elevated quorum is required (0–100).
+    FraudScoreThreshold,
+    /// Elevated quorum basis points applied when fraud score exceeds threshold.
+    ElevatedQuorumBps,
+    // ── Issue #587: Asset-specific claim amount bounds ────────────────────────
+    /// Per-asset min/max claim amount config.
+    AllowedAssetConfig(Address),
+    // ── Issue #585: Admin role delegation ────────────────────────────────────
+    /// Delegation record: operator address → DelegationRecord.
+    Delegation(Address),
+    // ── Issue #581: Reinsurance pool ──────────────────────────────────────────
+    /// Optional reinsurance contract address.
+    ReinsuranceContract,
 }
 pub fn has_open_claim(env: &Env, holder: &Address, policy_id: u32) -> bool {
     env.storage()
@@ -1290,4 +1312,98 @@ pub fn is_oracle_enabled(_env: &Env) -> bool {
 #[cfg(not(feature = "experimental"))]
 pub fn set_oracle_enabled(_env: &Env, _enabled: bool) {
     panic!("ORACLE_TRIGGERS_DISABLED")
+}
+
+// ── Issue #583: Claim fraud score ─────────────────────────────────────────────
+
+pub fn set_claim_fraud_score(env: &Env, claim_id: u64, score: u32) {
+    let key = DataKey::ClaimFraudScore(claim_id);
+    env.storage().persistent().set(&key, &score);
+    env.storage()
+        .persistent()
+        .extend_ttl(&key, PERSISTENT_TTL_THRESHOLD, PERSISTENT_TTL_EXTEND_TO);
+}
+
+pub fn get_claim_fraud_score(env: &Env, claim_id: u64) -> Option<u32> {
+    env.storage()
+        .persistent()
+        .get(&DataKey::ClaimFraudScore(claim_id))
+}
+
+pub fn set_fraud_score_threshold(env: &Env, threshold: u32) {
+    env.storage()
+        .instance()
+        .set(&DataKey::FraudScoreThreshold, &threshold);
+}
+
+/// Threshold above which elevated quorum is required. Default: 75.
+pub fn get_fraud_score_threshold(env: &Env) -> u32 {
+    env.storage()
+        .instance()
+        .get(&DataKey::FraudScoreThreshold)
+        .unwrap_or(75u32)
+}
+
+pub fn set_elevated_quorum_bps(env: &Env, bps: u32) {
+    env.storage()
+        .instance()
+        .set(&DataKey::ElevatedQuorumBps, &bps);
+}
+
+/// Elevated quorum bps used when fraud score exceeds threshold. Default: 7500 (75%).
+pub fn get_elevated_quorum_bps(env: &Env) -> u32 {
+    env.storage()
+        .instance()
+        .get(&DataKey::ElevatedQuorumBps)
+        .unwrap_or(7500u32)
+}
+
+// ── Issue #587: Asset-specific claim amount bounds ────────────────────────────
+
+pub fn set_allowed_asset_config(env: &Env, asset: &Address, config: &crate::types::AllowedAssetConfig) {
+    env.storage()
+        .instance()
+        .set(&DataKey::AllowedAssetConfig(asset.clone()), config);
+}
+
+pub fn get_allowed_asset_config(env: &Env, asset: &Address) -> Option<crate::types::AllowedAssetConfig> {
+    env.storage()
+        .instance()
+        .get(&DataKey::AllowedAssetConfig(asset.clone()))
+}
+
+// ── Issue #585: Admin role delegation ────────────────────────────────────────
+
+pub fn set_delegation(env: &Env, operator: &Address, record: &crate::types::DelegationRecord) {
+    env.storage()
+        .instance()
+        .set(&DataKey::Delegation(operator.clone()), record);
+}
+
+pub fn get_delegation(env: &Env, operator: &Address) -> Option<crate::types::DelegationRecord> {
+    env.storage()
+        .instance()
+        .get(&DataKey::Delegation(operator.clone()))
+}
+
+pub fn remove_delegation(env: &Env, operator: &Address) {
+    env.storage()
+        .instance()
+        .remove(&DataKey::Delegation(operator.clone()));
+}
+
+// ── Issue #581: Reinsurance pool ──────────────────────────────────────────────
+
+pub fn set_reinsurance_contract(env: &Env, addr: &Address) {
+    env.storage()
+        .instance()
+        .set(&DataKey::ReinsuranceContract, addr);
+}
+
+pub fn get_reinsurance_contract(env: &Env) -> Option<Address> {
+    env.storage().instance().get(&DataKey::ReinsuranceContract)
+}
+
+pub fn clear_reinsurance_contract(env: &Env) {
+    env.storage().instance().remove(&DataKey::ReinsuranceContract);
 }
